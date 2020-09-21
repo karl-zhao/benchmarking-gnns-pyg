@@ -2,7 +2,7 @@
     File to load dataset based on user control from main file
 """
 from data.superpixels import SuperPixDataset
-from data.molecules import MoleculeDataset
+from data.molecules import *
 from data.TUs import TUsDataset
 from data.SBMs import SBMsDataset
 from data.TSP import TSPDataset
@@ -22,7 +22,7 @@ def LoadData(DATASET_NAME,framwork = 'dgl'):
     
     # handling for (ZINC) molecule dataset
     if DATASET_NAME == 'ZINC':
-        return MoleculeDataset(DATASET_NAME, framwork)
+        return MoleculeDataset(DATASET_NAME) if 'dgl' == framwork else MoleculeDatasetpyg(DATASET_NAME)
 
     # handling for the TU Datasets
     TU_DATASETS = ['ENZYMES', 'DD', 'PROTEINS_full']

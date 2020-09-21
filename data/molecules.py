@@ -103,7 +103,7 @@ class Moleculepyg(InMemoryDataset):
         self.split = split
         self.num_graphs = num_graphs
         self.root = root
-
+        self.name = name
         with open(data_dir + "/%s.pickle" % self.split, "rb") as f:
             self.data = pickle.load(f)
 
@@ -126,10 +126,11 @@ class Moleculepyg(InMemoryDataset):
         self.n_samples = len(self.data)
         super(Moleculepyg, self).__init__(self.root, transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
+
         #self.process()
     @property
     def processed_file_names(self):
-        return 'geometric_data_processed' + self.split + '.pt'
+        return 'geometric_data_processed' + self.name + self.split + '.pt'
     def process(self):
         print("preparing %d graphs for the %s set..." % (self.num_graphs, self.split.upper()))
         print('Converting graphs into PyG objects...')
@@ -167,27 +168,7 @@ class Moleculepyg(InMemoryDataset):
         data, slices = self.collate(pyg_graph_list)
         print('Saving...')
         torch.save((data, slices), self.processed_paths[0])
-        #return pyg_graph_list
 
-    # def __len__(self):
-    #     """Return the number of graphs in the dataset."""
-    #     return self.n_samples
-    #
-    # def __getitem__(self, idx):
-    #     """
-    #         Get the idx^th sample.
-    #         Parameters
-    #         ---------
-    #         idx : int
-    #             The sample index.
-    #         Returns
-    #         -------
-    #         (dgl.DGLGraph, int)
-    #             DGLGraph with node feature stored in `feat` field
-    #             And its label.
-    #     """
-    #     return self.pyg_graph_list[idx], self.graph_labels[idx]
-    #
 class MoleculeDatasetDGL(torch.utils.data.Dataset):
     def __init__(self, name='Zinc', framwork = 'pyg'):
         t0 = time.time()
@@ -205,7 +186,7 @@ class MoleculeDatasetDGL(torch.utils.data.Dataset):
 
 
 class MoleculeDatasetpyg(InMemoryDataset):
-    def __init__(self, name='Zinc'):
+    def __init__(self, name='ZINC'):
         t0 = time.time()
         self.name = name
 
