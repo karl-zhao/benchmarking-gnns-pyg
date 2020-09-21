@@ -3,10 +3,17 @@ import dgl
 import torch
 from torch.utils.data import Dataset
 
-from ogb.linkproppred import DglLinkPropPredDataset, Evaluator
+from ogb.linkproppred import DglLinkPropPredDataset, Evaluator#, PygLinkPropPredDataset
 
 from scipy import sparse as sp
 import numpy as np
+from torch_geometric.data import InMemoryDataset
+try:
+    import torch_geometric.transforms as T
+    from ogb.linkproppred import PygLinkPropPredDataset
+except:
+    print('pyg import failed')
+
 
 
 def positional_encoding(g, pos_enc_dim):
@@ -33,22 +40,30 @@ def positional_encoding(g, pos_enc_dim):
 
     return g
 
-
-class COLLABDataset(Dataset):
-    def __init__(self, name):
+# class COLLABDataset(Dataset):change dataset into inmemorydataset
+class COLLABDataset(InMemoryDataset):
+    def __init__(self, name, framwork):
         start = time.time()
         print("[I] Loading dataset %s..." % (name))
         self.name = name
-        self.dataset = DglLinkPropPredDataset(name='ogbl-collab')
-        
-        self.graph = self.dataset[0]  # single DGL graph
-        
-        # Create edge feat by concatenating weight and year
-        self.graph.edata['feat'] = torch.cat( 
-            [self.graph.edata['edge_weight'], self.graph.edata['edge_year']], 
-            dim=1 
-        )
-        
+        if 'dgl' == framwork:
+            self.dataset = DglLinkPropPredDataset(name='ogbl-collab')
+            self.graph = self.dataset[0]  # single DGL graph
+            # Create edge feat by concatenating weight and year
+            self.graph.edata['feat'] = torch.cat(
+                [self.graph.edata['weight'], self.graph.edata['year']],
+                dim=1
+            )
+        elif 'pyg' == framwork:
+            self.dataset = PygLinkPropPredDataset(name='ogbl-collab')
+            self.graph = self.dataset[0]  # single DGL graph
+            self.graph.edge_feat = torch.cat(
+                [self.graph.edge_weight, self.graph.edge_year],
+                dim=1
+            )
+            self.graph.edge_weight = self.graph.edge_weight.view(-1).to(torch.float)
+            self.graph = T.ToSparseTensor()(self.graph)
+
         self.split_edge = self.dataset.get_edge_split()
         self.train_edges = self.split_edge['train']['edge']  # positive train edges
         self.val_edges = self.split_edge['valid']['edge']  # positive val edges

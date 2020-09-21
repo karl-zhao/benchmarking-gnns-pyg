@@ -11,6 +11,9 @@ import dgl
 
 from scipy import sparse as sp
 import numpy as np
+from torch_geometric.data import Data
+from torch_geometric.data import InMemoryDataset
+from tqdm import tqdm
 
 # *NOTE
 # The dataset pickle and index files are in ./zinc_molecules/ dir
@@ -92,10 +95,101 @@ class MoleculeDGL(torch.utils.data.Dataset):
                 And its label.
         """
         return self.graph_lists[idx], self.graph_labels[idx]
-    
-    
+
+
+class Moleculepyg(InMemoryDataset):
+    def __init__(self, data_dir, split, num_graphs, name, root = 'dataset', transform=None, pre_transform=None, meta_dict = None):
+        self.data_dir = data_dir
+        self.split = split
+        self.num_graphs = num_graphs
+        self.root = root
+
+        with open(data_dir + "/%s.pickle" % self.split, "rb") as f:
+            self.data = pickle.load(f)
+
+        # loading the sampled indices from file ./zinc_molecules/<split>.index
+        with open(data_dir + "/%s.index" % self.split, "r") as f:
+            data_idx = [list(map(int, idx)) for idx in csv.reader(f)]
+            self.data = [self.data[i] for i in data_idx[0]]
+
+        assert len(self.data) == num_graphs, "Sample num_graphs again; available idx: train/val/test => 10k/1k/1k"
+
+        """
+        data is a list of Molecule dict objects with following attributes
+
+          molecule = data[idx]
+        ; molecule['num_atom'] : nb of atoms, an integer (N)
+        ; molecule['atom_type'] : tensor of size N, each element is an atom type, an integer between 0 and num_atom_type
+        ; molecule['bond_type'] : tensor of size N x N, each element is a bond type, an integer between 0 and num_bond_type
+        ; molecule['logP_SA_cycle_normalized'] : the chemical property to regress, a float variable
+        """
+        self.n_samples = len(self.data)
+        super(Moleculepyg, self).__init__(self.root, transform)
+        self.data, self.slices = torch.load(self.processed_paths[0])
+        #self.process()
+    @property
+    def processed_file_names(self):
+        return 'geometric_data_processed' + self.split + '.pt'
+    def process(self):
+        print("preparing %d graphs for the %s set..." % (self.num_graphs, self.split.upper()))
+        print('Converting graphs into PyG objects...')
+        pyg_graph_list = []
+        graph_labels = []
+        for graph in tqdm(self.data):
+            node_features = graph['atom_type'].long()
+
+            adj = graph['bond_type']
+            edge_list = (adj != 0).nonzero()  # converting adj matrix to edge_list
+            edge_idxs_in_adj = edge_list.split(1, dim=1)
+            edge_features = adj[edge_idxs_in_adj].reshape(-1).long()
+
+            g = Data()
+            g.__num_nodes__ = graph['num_atom']
+            g.edge_index = edge_list.T
+            #g.edge_index = torch.from_numpy(edge_list)
+            g.edge_attr = edge_features
+            del graph['bond_type']
+
+            if graph['atom_type'] is not None:
+                g.x = graph['atom_type'].long()
+                del graph['atom_type']
+            graph_labels.append(graph['logP_SA_cycle_normalized'])
+            pyg_graph_list.append(g)
+        for i, g in enumerate(pyg_graph_list):
+            # if 'classification' in self.task_type:
+            #     if has_nan:
+            g.y = graph_labels[i].to(torch.float32)
+            #     else:
+            #         g.y = torch.from_numpy(graph_label[i]).view(1,-1).to(torch.long)
+            # else:
+            #     g.y = torch.from_numpy(graph_label[i]).view(1,-1).to(torch.float32)
+
+        data, slices = self.collate(pyg_graph_list)
+        print('Saving...')
+        torch.save((data, slices), self.processed_paths[0])
+        #return pyg_graph_list
+
+    # def __len__(self):
+    #     """Return the number of graphs in the dataset."""
+    #     return self.n_samples
+    #
+    # def __getitem__(self, idx):
+    #     """
+    #         Get the idx^th sample.
+    #         Parameters
+    #         ---------
+    #         idx : int
+    #             The sample index.
+    #         Returns
+    #         -------
+    #         (dgl.DGLGraph, int)
+    #             DGLGraph with node feature stored in `feat` field
+    #             And its label.
+    #     """
+    #     return self.pyg_graph_list[idx], self.graph_labels[idx]
+    #
 class MoleculeDatasetDGL(torch.utils.data.Dataset):
-    def __init__(self, name='Zinc'):
+    def __init__(self, name='Zinc', framwork = 'pyg'):
         t0 = time.time()
         self.name = name
         
@@ -103,12 +197,28 @@ class MoleculeDatasetDGL(torch.utils.data.Dataset):
         self.num_bond_type = 4 # known meta-info about the zinc dataset; can be calculated as well
         
         data_dir='./data/molecules'
-        
         self.train = MoleculeDGL(data_dir, 'train', num_graphs=10000)
         self.val = MoleculeDGL(data_dir, 'val', num_graphs=1000)
         self.test = MoleculeDGL(data_dir, 'test', num_graphs=1000)
+
         print("Time taken: {:.4f}s".format(time.time()-t0))
-        
+
+
+class MoleculeDatasetpyg(InMemoryDataset):
+    def __init__(self, name='Zinc'):
+        t0 = time.time()
+        self.name = name
+
+        self.num_atom_type = 28  # known meta-info about the zinc dataset; can be calculated as well
+        self.num_bond_type = 4  # known meta-info about the zinc dataset; can be calculated as well
+
+        data_dir = './data/molecules'
+        self.train = Moleculepyg(data_dir, 'train', num_graphs=10000, name='ZINC')
+        self.val = Moleculepyg(data_dir, 'val', num_graphs=1000, name='ZINC')
+        self.test = Moleculepyg(data_dir, 'test', num_graphs=1000, name='ZINC')
+
+
+        print("Time taken: {:.4f}s".format(time.time() - t0))
 
 
 def self_loop(g):

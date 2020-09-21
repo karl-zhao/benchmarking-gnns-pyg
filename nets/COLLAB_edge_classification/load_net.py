@@ -10,7 +10,7 @@ from nets.COLLAB_edge_classification.graphsage_net import GraphSageNet
 from nets.COLLAB_edge_classification.gin_net import GINNet
 from nets.COLLAB_edge_classification.mo_net import MoNet as MoNet_
 from nets.COLLAB_edge_classification.mlp_net import MLPNet
-from nets.COLLAB_edge_classification.matrix_factorization import MatrixFactorization
+from nets.COLLAB_edge_classification.matrix_factorization import *
 
 
 def GatedGCN(net_params):
@@ -37,7 +37,16 @@ def MLP(net_params):
 def MF(net_params):
     return MatrixFactorization(net_params)
 
+def SAGE(net_params):
+    return SAGENet(net_params)
+
+def pyg_GCN(net_params):
+    return pyg_GCNNet(net_params)
+
+
 def gnn_model(MODEL_NAME, net_params):
+    if net_params['framwork'] == 'pyg':
+        MODEL_NAME = 'pyg_' + MODEL_NAME
     models = {
         'GatedGCN': GatedGCN,
         'GCN': GCN,
@@ -47,6 +56,8 @@ def gnn_model(MODEL_NAME, net_params):
         'MoNet': MoNet,
         'MLP': MLP,
         'MF': MF,
+        'pyg_SAGE': SAGE,
+        'pyg_GCN': pyg_GCN,
     }
         
     return models[MODEL_NAME](net_params)

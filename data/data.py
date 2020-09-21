@@ -10,7 +10,7 @@ from data.COLLAB import COLLABDataset
 from data.CSL import CSLDataset
 
 
-def LoadData(DATASET_NAME):
+def LoadData(DATASET_NAME,framwork = 'dgl'):
     """
         This function is called in the main.py file 
         returns:
@@ -22,7 +22,7 @@ def LoadData(DATASET_NAME):
     
     # handling for (ZINC) molecule dataset
     if DATASET_NAME == 'ZINC':
-        return MoleculeDataset(DATASET_NAME)
+        return MoleculeDataset(DATASET_NAME, framwork)
 
     # handling for the TU Datasets
     TU_DATASETS = ['ENZYMES', 'DD', 'PROTEINS_full']
@@ -40,7 +40,7 @@ def LoadData(DATASET_NAME):
 
     # handling for COLLAB dataset
     if DATASET_NAME == 'OGBL-COLLAB':
-        return COLLABDataset(DATASET_NAME)
+        return COLLABDataset(DATASET_NAME, framwork)
 
     # handling for the CSL (Circular Skip Links) Dataset
     if DATASET_NAME == 'CSL': 

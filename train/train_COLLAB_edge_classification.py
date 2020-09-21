@@ -13,7 +13,7 @@ from tqdm import tqdm
 """
     For GCNs
 """
-def train_epoch_sparse(model, optimizer, device, graph, train_edges, batch_size, epoch, monet_pseudo=None):
+def train_epoch_sparse(model, optimizer, device, graph, train_edges, batch_size, framwork, epoch, monet_pseudo=None):
 
     model.train()
     
@@ -25,22 +25,26 @@ def train_epoch_sparse(model, optimizer, device, graph, train_edges, batch_size,
         optimizer.zero_grad()
         
         graph = graph.to(device)
-        x = graph.ndata['feat'].to(device)
-        e = graph.edata['feat'].to(device).float()
-        
+        if 'dgl' == framwork:
+            x = graph.ndata['feat'].to(device)
+            e = graph.edata['feat'].to(device).float()
+        elif 'pyg' == framwork:
+            x = graph.x.to(device)
+            e = graph.adj_t.to(device).float()
+
         if monet_pseudo is not None:
             # Assign e as pre-computed pesudo edges for MoNet
             e = monet_pseudo.to(device)
         
         # Compute node embeddings
         try:
-            x_pos_enc = graph.ndata['pos_enc'].to(device)
+            x_pos_enc = graph.ndata['pos_enc'].to(device) if 'dgl' == framwork else graph.pos_enc.to(device)
             sign_flip = torch.rand(x_pos_enc.size(1)).to(device)
             sign_flip[sign_flip>=0.5] = 1.0; sign_flip[sign_flip<0.5] = -1.0
             x_pos_enc = x_pos_enc * sign_flip.unsqueeze(0)
-            h = model(graph, x, e, x_pos_enc) 
+            h = model(graph, x, e, x_pos_enc) if 'dgl' == framwork else model(x, e, x_pos_enc)
         except:
-            h = model(graph, x, e)
+            h = model(graph, x, e) if 'dgl' == framwork else model(x, e)
         
         # Positive samples
         edge = train_edges[perm].t()
@@ -65,25 +69,28 @@ def train_epoch_sparse(model, optimizer, device, graph, train_edges, batch_size,
 def evaluate_network_sparse(model, device, graph, pos_train_edges, 
                      pos_valid_edges, neg_valid_edges, 
                      pos_test_edges, neg_test_edges, 
-                     evaluator, batch_size, epoch, monet_pseudo=None):
+                     evaluator, batch_size, framwork,epoch, monet_pseudo=None):
     
     model.eval()
     with torch.no_grad():
 
         graph = graph.to(device)
-        x = graph.ndata['feat'].to(device)
-        e = graph.edata['feat'].to(device).float()
-        
+        if 'dgl' == framwork:
+            x = graph.ndata['feat'].to(device)
+            e = graph.edata['feat'].to(device).float()
+        elif 'pyg' == framwork:
+            x = graph.x.to(device)
+            e = graph.adj_t.to(device).float()
         if monet_pseudo is not None:
             # Assign e as pre-computed pesudo edges for MoNet
             e = monet_pseudo.to(device)
 
         # Compute node embeddings
         try:
-            x_pos_enc = graph.ndata['pos_enc'].to(device)
-            h = model(graph, x, e, x_pos_enc) 
+            x_pos_enc = graph.ndata['pos_enc'].to(device) if 'dgl' == framwork else graph.pos_enc.to(device)
+            h = model(graph, x, e, x_pos_enc) if 'dgl' == framwork else model(x, e, x_pos_enc)
         except:
-            h = model(graph, x, e)
+            h = model(graph, x, e) if 'dgl' == framwork else model(x, e)
 
         pos_train_edges = pos_train_edges.to(device)
         pos_valid_edges = pos_valid_edges.to(device)
