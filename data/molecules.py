@@ -170,7 +170,7 @@ class Moleculepyg(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
 
 class MoleculeDatasetDGL(torch.utils.data.Dataset):
-    def __init__(self, name='Zinc', framwork = 'pyg'):
+    def __init__(self, name='Zinc', framework = 'pyg'):
         t0 = time.time()
         self.name = name
         

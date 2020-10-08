@@ -42,11 +42,11 @@ def positional_encoding(g, pos_enc_dim):
 
 # class COLLABDataset(Dataset):change dataset into inmemorydataset
 class COLLABDataset(InMemoryDataset):
-    def __init__(self, name, framwork):
+    def __init__(self, name, framework):
         start = time.time()
         print("[I] Loading dataset %s..." % (name))
         self.name = name
-        if 'dgl' == framwork:
+        if 'dgl' == framework:
             self.dataset = DglLinkPropPredDataset(name='ogbl-collab')
             self.graph = self.dataset[0]  # single DGL graph
             # Create edge feat by concatenating weight and year
@@ -54,7 +54,7 @@ class COLLABDataset(InMemoryDataset):
                 [self.graph.edata['weight'], self.graph.edata['year']],
                 dim=1
             )
-        elif 'pyg' == framwork:
+        elif 'pyg' == framework:
             self.dataset = PygLinkPropPredDataset(name='ogbl-collab')
             self.graph = self.dataset[0]  # single DGL graph
             self.graph.edge_feat = torch.cat(
