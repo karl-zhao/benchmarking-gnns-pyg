@@ -157,7 +157,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
 
     # At any point you can hit Ctrl + C to break out of training early.
     try:
-        with tqdm(range(params['epochs'])) as t:
+        with tqdm(range(params['epochs']),ncols = 0) as t:
             for epoch in t:
 
                 t.set_description('Epoch %d' % epoch)

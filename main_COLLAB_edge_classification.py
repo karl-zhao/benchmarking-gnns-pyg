@@ -167,10 +167,10 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
 
                 start = time.time()
                     
-                epoch_train_loss, optimizer = train_epoch(model, optimizer, device, graph, train_edges, params['batch_size'],params['framwork'], epoch, monet_pseudo)
+                epoch_train_loss, optimizer = train_epoch(model, optimizer, device, graph, train_edges, params['batch_size'],params['framework'], epoch, monet_pseudo)
                 
                 epoch_train_hits, epoch_val_hits, epoch_test_hits = evaluate_network(
-                    model, device, graph, train_edges, val_edges, val_edges_neg, test_edges, test_edges_neg, evaluator, params['batch_size'], params['framwork'], epoch, monet_pseudo)
+                    model, device, graph, train_edges, val_edges, val_edges_neg, test_edges, test_edges_neg, evaluator, params['batch_size'], params['framework'], epoch, monet_pseudo)
                 
                 epoch_train_losses.append(epoch_train_loss)
                 epoch_train_hits.append(epoch_train_hits)
@@ -302,7 +302,7 @@ def main():
     parser.add_argument('--layer_type', help="Please give a value for layer_type (for GAT and GatedGCN only)")
     parser.add_argument('--pos_enc_dim', help="Please give a value for pos_enc_dim")
     parser.add_argument('--pos_enc', help="Please give a value for pos_enc")
-    parser.add_argument('--framwork', type=str, default='dgl',help="Please give a str for framwork choose")
+    parser.add_argument('--framework', type=str, default='dgl',help="Please give a str for framework choose")
     args = parser.parse_args()
     with open(args.config) as f:
         config = json.load(f)
@@ -322,11 +322,11 @@ def main():
         DATASET_NAME = args.dataset
     else:
         DATASET_NAME = config['dataset']
-    if args.framwork is not None:
-        framwork = args.framwork
+    if args.framework is not None:
+        framework = args.framework
     else:
-        framwork = config['framwork']
-    dataset = LoadData(DATASET_NAME,framwork)
+        framework = config['framework']
+    dataset = LoadData(DATASET_NAME,framework)
     if args.out_dir is not None:
         out_dir = args.out_dir
     else:
@@ -353,14 +353,14 @@ def main():
         params['print_epoch_interval'] = int(args.print_epoch_interval)
     if args.max_time is not None:
         params['max_time'] = float(args.max_time)
-    if args.framwork is not None:
-        params['framwork'] = str(args.framwork)
+    if args.framework is not None:
+        params['framework'] = str(args.framework)
     # network parameters
     net_params = config['net_params']
     net_params['device'] = device
     net_params['gpu_id'] = config['gpu']['id']
     net_params['batch_size'] = params['batch_size']
-    net_params['framwork'] = framwork
+    net_params['framework'] = framework
     if args.L is not None:
         net_params['L'] = int(args.L)
     if args.hidden_dim is not None:
@@ -412,18 +412,18 @@ def main():
     if args.pos_enc_dim is not None:
         net_params['pos_enc_dim'] = int(args.pos_enc_dim)
     # COLLAB
-    if 'pyg' == framwork:
+    if 'pyg' == framework:
         net_params['in_dim'] = dataset.graph.x.shape[-1]
         net_params['in_dim_edge'] = dataset.graph.edge_feat.shape[-1]
-    elif 'dgl' == framwork:
+    elif 'dgl' == framework:
         net_params['in_dim'] = dataset.graph.ndata['feat'].shape[-1]
         net_params['in_dim_edge'] = dataset.graph.edata['feat'].shape[-1]
     net_params['n_classes'] = 1  # binary prediction
     
-    root_log_dir = out_dir + 'logs/' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framwork + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
-    root_ckpt_dir = out_dir + 'checkpoints/' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framwork + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
-    write_file_name = out_dir + 'results/result_' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framwork + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
-    write_config_file = out_dir + 'configs/config_' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framwork + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
+    root_log_dir = out_dir + 'logs/' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framework + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
+    root_ckpt_dir = out_dir + 'checkpoints/' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framework + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
+    write_file_name = out_dir + 'results/result_' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framework + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
+    write_config_file = out_dir + 'configs/config_' + MODEL_NAME + "_" + DATASET_NAME + "_fram" + framework + "_GPU" + str(config['gpu']['id']) + "_" + time.strftime('%Hh%Mm%Ss_on_%b_%d_%Y')
     dirs = root_log_dir, root_ckpt_dir, write_file_name, write_config_file
 
     if not os.path.exists(out_dir + 'results'):
