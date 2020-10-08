@@ -45,7 +45,7 @@ def pyg_GCN(net_params):
 
 
 def gnn_model(MODEL_NAME, net_params):
-    if net_params['framwork'] == 'pyg':
+    if net_params['framework'] == 'pyg':
         MODEL_NAME = 'pyg_' + MODEL_NAME
     models = {
         'GatedGCN': GatedGCN,
