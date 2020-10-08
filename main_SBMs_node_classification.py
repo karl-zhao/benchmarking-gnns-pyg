@@ -23,9 +23,10 @@ import torch.nn.functional as F
 
 import torch.optim as optim
 from torch.utils.data import DataLoader
-
+from torch_geometric.data import DataLoader as DataLoaderpyg
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
+import torch_geometric.transforms as T
 
 class DotDict(dict):
     def __init__(self, **kwds):
@@ -52,11 +53,10 @@ from data.data import LoadData # import dataset
 """
 def gpu_setup(use_gpu, gpu_id):
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)  
-
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
     if torch.cuda.is_available() and use_gpu:
-        print('cuda available with GPU:',torch.cuda.get_device_name(0))
-        device = torch.device("cuda")
+        print('cuda available with GPU:',torch.cuda.get_device_name(gpu_id))
+        device = torch.device("cuda:"+ str(gpu_id))
     else:
         print('cuda not available')
         device = torch.device("cpu")
@@ -109,7 +109,8 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
             print('Time PE:',time.time()-start0)
         
     trainset, valset, testset = dataset.train, dataset.val, dataset.test
-        
+    # transform = T.ToSparseTensor() To do to save memory
+    # self.train.graph_lists = [positional_encoding(g, pos_enc_dim, framework='pyg') for _, g in enumerate(dataset.train)]
     root_log_dir, root_ckpt_dir, write_file_name, write_config_file = dirs
     device = net_params['device']
     
@@ -156,13 +157,13 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
         # import train functions for all other GCNs
         from train.train_SBMs_node_classification import train_epoch_sparse as train_epoch, evaluate_network_sparse as evaluate_network 
         
-        train_loader = DataLoader(trainset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
-        val_loader = DataLoader(valset, batch_size=params['batch_size'], shuffle=False, collate_fn=dataset.collate)
-        test_loader = DataLoader(testset, batch_size=params['batch_size'], shuffle=False, collate_fn=dataset.collate)
+        train_loader = DataLoaderpyg(trainset, batch_size=params['batch_size'], shuffle=True) if params['framework'] == 'pyg' else DataLoader(trainset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
+        val_loader = DataLoaderpyg(valset, batch_size=params['batch_size'], shuffle=False) if params['framework'] == 'pyg' else DataLoader(valset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
+        test_loader = DataLoaderpyg(testset, batch_size=params['batch_size'], shuffle=False) if params['framework'] == 'pyg' else DataLoader(testset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
         
     # At any point you can hit Ctrl + C to break out of training early.
     try:
-        with tqdm(range(params['epochs'])) as t:
+        with tqdm(range(params['epochs']),ncols= 0) as t:
             for epoch in t:
 
                 t.set_description('Epoch %d' % epoch)
@@ -170,12 +171,12 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
                 start = time.time()
 
                 if MODEL_NAME in ['RingGNN', '3WLGNN']: # since different batch training function for dense GNNs
-                    epoch_train_loss, epoch_train_acc, optimizer = train_epoch(model, optimizer, device, train_loader, epoch, params['batch_size'])
-                else:   # for all other models common train function
                     epoch_train_loss, epoch_train_acc, optimizer = train_epoch(model, optimizer, device, train_loader, epoch)
+                else:   # for all other models common train function
+                    epoch_train_loss, epoch_train_acc, optimizer = train_epoch(model, optimizer, device, train_loader, epoch, params['framework'])
                     
-                epoch_val_loss, epoch_val_acc = evaluate_network(model, device, val_loader, epoch)
-                _, epoch_test_acc = evaluate_network(model, device, test_loader, epoch)        
+                epoch_val_loss, epoch_val_acc = evaluate_network(model, device, val_loader, epoch, params['framework'])
+                _, epoch_test_acc = evaluate_network(model, device, test_loader, epoch, params['framework'])
                 
                 epoch_train_losses.append(epoch_train_loss)
                 epoch_val_losses.append(epoch_val_loss)
@@ -256,9 +257,9 @@ def main():
         USER CONTROLS
     """
     
-    
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help="Please give a config.json file with training/model/data/param details")
+    parser.add_argument('--framework', type=str, default='pyg', help="Please give a framework to use")
     parser.add_argument('--gpu_id', help="Please give a value for gpu id")
     parser.add_argument('--model', help="Please give a value for model name")
     parser.add_argument('--dataset', help="Please give a value for dataset name")
@@ -315,7 +316,7 @@ def main():
         DATASET_NAME = args.dataset
     else:
         DATASET_NAME = config['dataset']
-    dataset = LoadData(DATASET_NAME)
+    dataset = LoadData(DATASET_NAME, args.framework)
     if args.out_dir is not None:
         out_dir = args.out_dir
     else:
@@ -342,6 +343,8 @@ def main():
         params['print_epoch_interval'] = int(args.print_epoch_interval)
     if args.max_time is not None:
         params['max_time'] = float(args.max_time)
+    if args.framework is not None:
+        params['framework'] = str(args.framework)
     # network parameters
     net_params = config['net_params']
     net_params['device'] = device
@@ -395,11 +398,14 @@ def main():
         net_params['pos_enc'] = True if args.pos_enc=='True' else False
     if args.pos_enc_dim is not None:
         net_params['pos_enc_dim'] = int(args.pos_enc_dim)
+
         
     # SBM
-    net_params['in_dim'] = torch.unique(dataset.train[0][0].ndata['feat'],dim=0).size(0) # node_dim (feat is an integer)
-    net_params['n_classes'] = torch.unique(dataset.train[0][1],dim=0).size(0)
-    
+    # net_params['in_dim'] = torch.unique(dataset.train[0][0].ndata['feat'],dim=0).size(0) # node_dim (feat is an integer)
+    # net_params['n_classes'] = torch.unique(dataset.train[0][1],dim=0).size(0)
+    net_params['in_dim'] = torch.unique(dataset.train[0].x,dim=0).size(0) if 'pyg' == args.framework else torch.unique(dataset.train[0][0].ndata['feat'],dim=0).size(0)
+    net_params['n_classes'] = torch.unique(dataset.train[0].y,dim=0).size(0) if 'pyg' == args.framework else torch.unique(dataset.train[0][1], dim=0).size(0)
+
     if MODEL_NAME == 'RingGNN':
         num_nodes = [dataset.train[i][0].number_of_nodes() for i in range(len(dataset.train))]
         net_params['avg_node_num'] = int(np.ceil(np.mean(num_nodes)))
