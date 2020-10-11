@@ -14,6 +14,7 @@ import numpy as np
 
 from layers.gmm_layer import GMMLayer
 from layers.mlp_readout_layer import MLPReadout
+from torch_geometric.nn import GMMConv
 
 class MoNet(nn.Module):
     def __init__(self, net_params):
@@ -85,6 +86,84 @@ class MoNet(nn.Module):
         weight = (V - cluster_sizes).float() / V
         weight *= (cluster_sizes>0).float()
         
+        # weighted cross-entropy for unbalanced classes
+        criterion = nn.CrossEntropyLoss(weight=weight)
+        loss = criterion(pred, label)
+
+        return loss
+
+"""
+    GMM: Gaussian Mixture Model Convolution layer
+    Geometric Deep Learning on Graphs and Manifolds using Mixture Model CNNs (Federico Monti et al., CVPR 2017)
+    https://arxiv.org/pdf/1611.08402.pdf
+"""
+class MoNetNet_pyg(nn.Module):
+    def __init__(self, net_params):
+        super().__init__()
+        self.name = 'MoNet'
+        in_dim = net_params['in_dim']
+        hidden_dim = net_params['hidden_dim']
+        out_dim = net_params['out_dim']
+        kernel = net_params['kernel']  # for MoNet
+        dim = net_params['pseudo_dim_MoNet']  # for MoNet
+        n_classes = net_params['n_classes']
+        self.dropout = net_params['dropout']
+        self.n_layers = net_params['L']
+        self.readout = net_params['readout']
+        self.batch_norm = net_params['batch_norm']
+        self.residual = net_params['residual']
+        self.device = net_params['device']
+        self.n_classes = n_classes
+        self.dim = dim
+        # aggr_type = "sum"  # default for MoNet
+        aggr_type = "mean"
+
+        self.embedding_h = nn.Embedding(in_dim, hidden_dim)
+        self.embedding_e = nn.Linear(1, dim)  # edge feat is a float
+        self.layers = nn.ModuleList()
+        self.pseudo_proj = nn.ModuleList()
+        self.batchnorm_h = nn.ModuleList()
+        # Hidden layer
+        for _ in range(self.n_layers - 1):
+            self.layers.append(GMMConv(hidden_dim, hidden_dim, dim, kernel, separate_gaussians = False ,aggr = aggr_type,
+                                        root_weight = True, bias = True))
+            if self.batch_norm:
+                self.batchnorm_h.append(nn.BatchNorm1d(hidden_dim))
+        # Output layer
+        self.layers.append(GMMConv(hidden_dim, out_dim, dim, kernel, separate_gaussians = False ,aggr = aggr_type,
+                                        root_weight = True, bias = True))
+        if self.batch_norm:
+            self.batchnorm_h.append(nn.BatchNorm1d(out_dim))
+
+        self.MLP_layer = MLPReadout(out_dim, n_classes)
+        # to do
+
+    def forward(self, h, edge_index, e):
+        h = self.embedding_h(h)
+        e = self.embedding_e(e) # edge feat is a float
+        for i in range(self.n_layers):
+            h_in = h
+            h = self.layers[i](h, edge_index, e)
+            if self.batch_norm:
+                h = self.batchnorm_h[i](h)  # batch normalization
+            h = F.relu(h)  # non-linear activation
+            if self.residual:
+                h = h_in + h  # residual connection
+            h = F.dropout(h, self.dropout, training=self.training)
+
+        return self.MLP_layer(h)
+
+    def loss(self, pred, label):
+
+        # calculating label weights for weighted loss computation
+        V = label.size(0)
+        label_count = torch.bincount(label)
+        label_count = label_count[label_count.nonzero()].squeeze()
+        cluster_sizes = torch.zeros(self.n_classes).long().to(self.device)
+        cluster_sizes[torch.unique(label)] = label_count
+        weight = (V - cluster_sizes).float() / V
+        weight *= (cluster_sizes > 0).float()
+
         # weighted cross-entropy for unbalanced classes
         criterion = nn.CrossEntropyLoss(weight=weight)
         loss = criterion(pred, label)

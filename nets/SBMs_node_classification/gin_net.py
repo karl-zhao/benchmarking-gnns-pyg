@@ -119,7 +119,8 @@ class GINNet_pyg(nn.Module):
         self.residual = residual
         for layer in range(self.n_layers):
             mlp = MLP(n_mlp_layers, hidden_dim, hidden_dim, hidden_dim)
-            self.ginlayers.append(GINConv(ApplyNodeFunc(mlp), 0, learn_eps, aggr = neighbor_aggr_type))
+
+            self.ginlayers.append(GINConv(ApplyNodeFunc(mlp), 0, learn_eps))
             # note that neighbor_aggr_type can not work because the father
             # self.ginlayers.append(GINLayer(ApplyNodeFunc(mlp), neighbor_aggr_type,
             #                                dropout, batch_norm, residual, 0, learn_eps))
@@ -133,7 +134,7 @@ class GINNet_pyg(nn.Module):
         for layer in range(self.n_layers + 1):
             self.linears_prediction.append(nn.Linear(hidden_dim, n_classes))
 
-    def forward(self, h, edge_index):
+    def forward(self, h, edge_index, e):
 
         h = self.embedding_h(h)
 
