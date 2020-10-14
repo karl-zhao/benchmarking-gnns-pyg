@@ -155,8 +155,8 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
         
     else:
         # import train functions for all other GCNs
-        from train.train_SBMs_node_classification import train_epoch_sparse as train_epoch, evaluate_network_sparse as evaluate_network 
-        
+        from train.train_SBMs_node_classification import train_epoch_sparse as train_epoch, evaluate_network_sparse as evaluate_network
+        # train_loader = DataLoaderpyg(trainset, batch_size=2, shuffle=False)
         train_loader = DataLoaderpyg(trainset, batch_size=params['batch_size'], shuffle=True) if params['framework'] == 'pyg' else DataLoader(trainset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
         val_loader = DataLoaderpyg(valset, batch_size=params['batch_size'], shuffle=False) if params['framework'] == 'pyg' else DataLoader(valset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
         test_loader = DataLoaderpyg(testset, batch_size=params['batch_size'], shuffle=False) if params['framework'] == 'pyg' else DataLoader(testset, batch_size=params['batch_size'], shuffle=True, collate_fn=dataset.collate)
@@ -201,7 +201,8 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
                 ckpt_dir = os.path.join(root_ckpt_dir, "RUN_")
                 if not os.path.exists(ckpt_dir):
                     os.makedirs(ckpt_dir)
-                torch.save(model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + str(epoch)))
+                # the function to save the checkpoint
+                # torch.save(model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + str(epoch)))
 
                 files = glob.glob(ckpt_dir + '/*.pkl')
                 for file in files:
@@ -211,6 +212,9 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
                         os.remove(file)
 
                 scheduler.step(epoch_val_loss)
+                # # it used to test the scripts
+                # if epoch == 1:
+                #     break
 
                 if optimizer.param_groups[0]['lr'] < params['min_lr']:
                     print("\n!! LR SMALLER OR EQUAL TO MIN LR THRESHOLD.")
@@ -227,9 +231,11 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
         print('Exiting from training early because of KeyboardInterrupt')
     
     
-    _, test_acc = evaluate_network(model, device, test_loader, epoch)
-    _, train_acc = evaluate_network(model, device, train_loader, epoch)
+    _, test_acc = evaluate_network(model, device, test_loader, epoch, params['framework'])
+    _, val_acc = evaluate_network(model, device, val_loader, epoch, params['framework'])
+    _, train_acc = evaluate_network(model, device, train_loader, epoch, params['framework'])
     print("Test Accuracy: {:.4f}".format(test_acc))
+    print("Val Accuracy: {:.4f}".format(val_acc))
     print("Train Accuracy: {:.4f}".format(train_acc))
     print("Convergence Time (Epochs): {:.4f}".format(epoch))
     print("TOTAL TIME TAKEN: {:.4f}s".format(time.time()-start0))
@@ -259,7 +265,7 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', help="Please give a config.json file with training/model/data/param details")
-    parser.add_argument('--framework', type=str, default='pyg', help="Please give a framework to use")
+    parser.add_argument('--framework', type=str, default= None, help="Please give a framework to use")
     parser.add_argument('--gpu_id', help="Please give a value for gpu id")
     parser.add_argument('--model', help="Please give a value for model name")
     parser.add_argument('--dataset', help="Please give a value for dataset name")
@@ -316,13 +322,16 @@ def main():
         DATASET_NAME = args.dataset
     else:
         DATASET_NAME = config['dataset']
-    dataset = LoadData(DATASET_NAME, args.framework)
+    # parameters
+    params = config['params']
+    params['framework'] = 'pyg' if MODEL_NAME[-3:] == 'pyg' else 'dgl'
+    if args.framework is not None:
+        params['framework'] = str(args.framework)
+    dataset = LoadData(DATASET_NAME, params['framework'])
     if args.out_dir is not None:
         out_dir = args.out_dir
     else:
         out_dir = config['out_dir']
-    # parameters
-    params = config['params']
     if args.seed is not None:
         params['seed'] = int(args.seed)
     if args.epochs is not None:
@@ -343,8 +352,7 @@ def main():
         params['print_epoch_interval'] = int(args.print_epoch_interval)
     if args.max_time is not None:
         params['max_time'] = float(args.max_time)
-    if args.framework is not None:
-        params['framework'] = str(args.framework)
+
     # network parameters
     net_params = config['net_params']
     net_params['device'] = device
@@ -403,8 +411,8 @@ def main():
     # SBM
     # net_params['in_dim'] = torch.unique(dataset.train[0][0].ndata['feat'],dim=0).size(0) # node_dim (feat is an integer)
     # net_params['n_classes'] = torch.unique(dataset.train[0][1],dim=0).size(0)
-    net_params['in_dim'] = torch.unique(dataset.train[0].x,dim=0).size(0) if 'pyg' == args.framework else torch.unique(dataset.train[0][0].ndata['feat'],dim=0).size(0)
-    net_params['n_classes'] = torch.unique(dataset.train[0].y,dim=0).size(0) if 'pyg' == args.framework else torch.unique(dataset.train[0][1], dim=0).size(0)
+    net_params['in_dim'] = torch.unique(dataset.train[0].x,dim=0).size(0) if 'pyg' == params['framework'] else torch.unique(dataset.train[0][0].ndata['feat'],dim=0).size(0)
+    net_params['n_classes'] = torch.unique(dataset.train[0].y,dim=0).size(0) if 'pyg' == params['framework'] else torch.unique(dataset.train[0][1], dim=0).size(0)
 
     if MODEL_NAME == 'RingGNN':
         num_nodes = [dataset.train[i][0].number_of_nodes() for i in range(len(dataset.train))]

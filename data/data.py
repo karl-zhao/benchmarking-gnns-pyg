@@ -8,6 +8,7 @@ from data.SBMs import SBMsDataset, SBMsDatasetpyg
 from data.TSP import TSPDataset
 from data.COLLAB import COLLABDataset
 from data.CSL import CSLDataset
+from data.planetoids import PlanetoidDataset
 
 
 def LoadData(DATASET_NAME,framework = 'dgl'):
@@ -45,4 +46,8 @@ def LoadData(DATASET_NAME,framework = 'dgl'):
     # handling for the CSL (Circular Skip Links) Dataset
     if DATASET_NAME == 'CSL': 
         return CSLDataset(DATASET_NAME)
+
+    if DATASET_NAME in ['Cora', 'Citeseer', 'Pubmed']:
+        return PlanetoidDataset(DATASET_NAME)
+
     
