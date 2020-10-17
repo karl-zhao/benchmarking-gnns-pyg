@@ -212,7 +212,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
                         os.remove(file)
 
                 scheduler.step(epoch_val_loss)
-                # # it used to test the scripts
+                # it used to test the scripts
                 # if epoch == 1:
                 #     break
 
@@ -327,7 +327,7 @@ def main():
     params['framework'] = 'pyg' if MODEL_NAME[-3:] == 'pyg' else 'dgl'
     if args.framework is not None:
         params['framework'] = str(args.framework)
-    dataset = LoadData(DATASET_NAME, params['framework'])
+    dataset = LoadData(DATASET_NAME, framework = params['framework'])
     if args.out_dir is not None:
         out_dir = args.out_dir
     else:
