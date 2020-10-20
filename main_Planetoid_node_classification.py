@@ -94,6 +94,7 @@ def view_model_param(MODEL_NAME, net_params):
 def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     avg_test_acc = []
     avg_train_acc = []
+    avg_val_acc = []
     avg_convergence_epochs = []
 
     t0 = time.time()
@@ -193,8 +194,8 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
                     scheduler.step(epoch_val_loss)
 
                     # it used to test the scripts
-                    if epoch == 1:
-                        break
+                    # if epoch == 1:
+                    #     break
 
                     if optimizer.param_groups[0]['lr'] < params['min_lr']:
                         print("\n!! LR EQUAL TO MIN LR SET.")
@@ -207,12 +208,15 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
                         break
 
             _, test_acc = evaluate_network(model, device, dataset, test_idx)
+            _, val_acc = evaluate_network(model, device, dataset, val_idx)
             _, train_acc = evaluate_network(model, device, dataset, train_idx)
-            avg_test_acc.append(test_acc)   
+            avg_val_acc.append(val_acc)
+            avg_test_acc.append(test_acc)
             avg_train_acc.append(train_acc)
             avg_convergence_epochs.append(epoch)
 
             print("Test Accuracy [LAST EPOCH]: {:.4f}".format(test_acc))
+            print("Val Accuracy: {:.4f}".format(val_acc))
             print("Train Accuracy [LAST EPOCH]: {:.4f}".format(train_acc))
             print("Convergence Time (Epochs): {:.4f}".format(epoch))
     
@@ -227,6 +231,9 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     # Final test accuracy value averaged over 10-fold
     print("""\n\n\nFINAL RESULTS\n\nTEST ACCURACY averaged: {:.4f} with s.d. {:.4f}"""          .format(np.mean(np.array(avg_test_acc))*100, np.std(avg_test_acc)*100))
     print("\nAll splits Test Accuracies:\n", avg_test_acc)
+    print("""\n\n\nFINAL RESULTS\n\nVAL ACCURACY averaged: {:.4f} with s.d. {:.4f}""".format(
+        np.mean(np.array(avg_val_acc)) * 100, np.std(avg_val_acc) * 100))
+    print("\nAll splits Val Accuracies:\n", avg_val_acc)
     print("""\n\n\nFINAL RESULTS\n\nTRAIN ACCURACY averaged: {:.4f} with s.d. {:.4f}"""          .format(np.mean(np.array(avg_train_acc))*100, np.std(avg_train_acc)*100))
     print("\nAll splits Train Accuracies:\n", avg_train_acc)
 
@@ -353,7 +360,7 @@ def main():
     net_params = config['net_params']
     net_params['device'] = device
     net_params['gpu_id'] = config['gpu']['id']
-    net_params['batch_size'] = params['batch_size']
+
     if args.L is not None:
         net_params['L'] = int(args.L)
     if args.hidden_dim is not None:
