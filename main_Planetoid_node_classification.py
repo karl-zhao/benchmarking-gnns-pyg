@@ -115,6 +115,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     # At any point you can hit Ctrl + C to break out of training early.
     try:
         for split_number in range(10):
+
             t0_split = time.time()
             log_dir = os.path.join(root_log_dir, "RUN_" + str(split_number))
             writer = SummaryWriter(log_dir=log_dir)
@@ -210,6 +211,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
             _, test_acc = evaluate_network(model, device, dataset, test_idx)
             _, val_acc = evaluate_network(model, device, dataset, val_idx)
             _, train_acc = evaluate_network(model, device, dataset, train_idx)
+
             avg_val_acc.append(val_acc)
             avg_test_acc.append(test_acc)
             avg_train_acc.append(train_acc)
@@ -265,6 +267,7 @@ def main():
     parser.add_argument('--config', help="Please give a config.json file with training/model/data/param details")
     parser.add_argument('--framework', type=str, default= None, help="Please give a framework to use")
     parser.add_argument('--gpu_id', help="Please give a value for gpu id")
+    parser.add_argument('--use_node_embedding', action='store_true')
     parser.add_argument('--model', help="Please give a value for model name")
     parser.add_argument('--dataset', help="Please give a value for dataset name")
     parser.add_argument('--out_dir', help="Please give a value for out_dir")
@@ -330,7 +333,9 @@ def main():
     params['framework'] = 'pyg' if MODEL_NAME[-3:] == 'pyg' else 'dgl'
     if args.framework is not None:
         params['framework'] = str(args.framework)
-    dataset = LoadData(DATASET_NAME, params['framework'])
+    if args.use_node_embedding is not None:
+        params['use_node_embedding'] = bool(args.use_node_embedding)
+    dataset = LoadData(DATASET_NAME, use_node_embedding = params['use_node_embedding'],framework = params['framework'])
     if args.out_dir is not None:
         out_dir = args.out_dir
     else:
@@ -355,6 +360,8 @@ def main():
         params['print_epoch_interval'] = int(args.print_epoch_interval)
     if args.max_time is not None:
         params['max_time'] = float(args.max_time)
+
+
 
     # network parameters
     net_params = config['net_params']
