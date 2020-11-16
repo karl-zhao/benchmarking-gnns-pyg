@@ -22,26 +22,6 @@ source ~/.bashrc          # For Linux
 source ~/.bash_profile    # For OSX
 ```
 
-
-<br>
-
-## 2. Setup Python environment for CPU
-
-```
-# Clone GitHub repo
-conda install git
-git clone https://github.com/graphdeeplearning/benchmarking-gnns.git
-cd benchmarking-gnns
-
-# Install python environment
-conda env create -f environment_cpu.yml   
-
-# Activate environment
-conda activate benchmark_gnn
-```
-
-
-
 <br>
 
 ## 3. Setup Python environment for GPU

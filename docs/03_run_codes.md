@@ -12,8 +12,7 @@
 
 ```
 # Run the main file (at the root of the project)
-python main_molecules_graph_regression.py --dataset ZINC --config 'configs/molecules_graph_regression_GatedGCN_ZINC_100k.json' # for CPU
-python main_molecules_graph_regression.py --dataset ZINC --gpu_id 0 --config 'configs/molecules_graph_regression_GatedGCN_ZINC_100k.json' # for GPU
+python main_arxiv_node_classification.py --dataset ogbn-arxiv --gpu_id 0 --seed 41 --config configs/arxiv_node_classification_GAT_pyg_90k.json' # for GPU
 ```
 The training and network parameters for each dataset and network is stored in a json file in the [`configs/`](../configs) directory.
 
