@@ -12,7 +12,7 @@ def MAE(scores, targets):
     MAE = MAE.detach().item()
     return MAE
 
-
+# it is the original one to calculate the value, have found the ogb evaluator use the same way. There we use this one to calculate.
 def accuracy_TU(scores, targets):
     scores = scores.detach().argmax(dim=1)
     acc = (scores==targets).float().sum().item()
@@ -30,7 +30,8 @@ def accuracy_CITATION_GRAPH(scores, targets):
     acc = acc / len(targets)
     return acc
 
-
+# it takes into account the case of each class, is the sum of the accuracy of each class(the right divide the total in each class) then
+# divided by the total number of classes
 def accuracy_SBM(scores, targets):
     S = targets.cpu().numpy()
     C = np.argmax( torch.nn.Softmax(dim=1)(scores).cpu().detach().numpy() , axis=1 )
@@ -49,6 +50,20 @@ def accuracy_SBM(scores, targets):
             pr_classes[r] = 0.0
     acc = 100.* np.sum(pr_classes)/ float(nb_classes)
     return acc
+
+def accuracy_ogb(y_pred, y_true):
+    acc_list = []
+    # y_true = data.y
+    # y_pred = y_pred.argmax(dim=-1, keepdim=True)
+    # for i in range(y_true.shape[0]):
+    #     is_labeled = y_true[:, i] == y_true[:, i]
+    #     correct = y_true[is_labeled, i] == y_pred[is_labeled, i]
+    #     acc_list.append(float(np.sum(correct)) / len(correct))
+    y_pred = y_pred.detach().argmax(dim=1)
+    acc = (y_pred == y_true).float().sum().item()
+    return acc
+
+
 
 
 def binary_f1_score(scores, targets):
