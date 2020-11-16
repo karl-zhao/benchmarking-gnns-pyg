@@ -4,14 +4,14 @@ import torch.utils.data
 import time
 import os
 import numpy as np
-
+from torch_geometric.utils import get_laplacian
 import csv
-
+from scipy import sparse as sp
 import dgl
 from dgl.data import TUDataset
 from dgl.data import LegacyTUDataset
 import torch_geometric as pyg
-
+from scipy.sparse import csr_matrix
 import random
 random.seed(42)
 
@@ -62,7 +62,7 @@ def get_all_split_idx(dataset):
         - Preparing 10 such combinations of indexes split to be used in Graph NNs
         - As with KFold, each of the 10 fold have unique test set.
     """
-    root_idx_dir = './data/TUs/'
+    root_idx_dir = './data/planetoid/'
     if not os.path.exists(root_idx_dir):
         os.makedirs(root_idx_dir)
 
@@ -97,67 +97,6 @@ def get_all_split_idx(dataset):
         all_idx = json.load(fp)
     return all_idx
 
-# def get_all_split_idx(dataset):
-#     """
-#         - Split total number of graphs into 3 (train, val and test) in 80:10:10
-#         - Stratified split proportionate to original distribution of data with respect to classes
-#         - Using sklearn to perform the split and then save the indexes
-#         - Preparing 10 such combinations of indexes split to be used in Graph NNs
-#         - As with KFold, each of the 10 fold have unique test set.
-#     """
-#     root_idx_dir = './data/TUs/'
-#     if not os.path.exists(root_idx_dir):
-#         os.makedirs(root_idx_dir)
-#     all_idx = {}
-#
-#     # If there are no idx files, do the split and store the files
-#     if not (os.path.exists(root_idx_dir + dataset.name + '_train.index')):
-#         print("[!] Splitting the data into train/val/test ...")
-#
-#         # Using 10-fold cross val to compare with benchmark papers
-#         k_splits = 10
-#
-#         cross_val_fold = StratifiedKFold(n_splits=k_splits, shuffle=True)
-#         k_data_splits = []
-#
-#         # this is a temporary index assignment, to be used below for val splitting
-#         label_index = torch.cat([dataset[0].y.view(-1,1), torch.arange(dataset[0].x.size()[0]).view(-1, 1)], dim=1)
-#
-#         for indexes in cross_val_fold.split(dataset[0].x, dataset[0].y):
-#             remain_index, test_index = indexes[0], indexes[1]
-#
-#             remain_set = format_dataset([[dataset[0].x[index], label_index[index]] for index in remain_index])
-#             train_ok_targets = dataset[0].y[remain_index]
-#             # Gets final 'train' and 'val'
-#             train, val, _, __ = train_test_split(remain_set,
-#                                                     range(len(remain_set.node_lists)),
-#                                                     test_size=0.111,
-#                                                     stratify=train_ok_targets)
-#
-#             # train, val = format_dataset(train), format_dataset(val)
-#             # test = format_dataset([dataset[index] for index in test_index])
-#
-#             # Extracting only idxs
-#             idx_train = [item[1][1] for item in train]
-#             idx_val = [item[1][1] for item in val]
-#             idx_test = test_index
-#
-#             f_train_w = csv.writer(open(root_idx_dir + dataset.name + '_train.index', 'a+'))
-#             f_val_w = csv.writer(open(root_idx_dir + dataset.name + '_val.index', 'a+'))
-#             f_test_w = csv.writer(open(root_idx_dir + dataset.name + '_test.index', 'a+'))
-#
-#             f_train_w.writerow(idx_train)
-#             f_val_w.writerow(idx_val)
-#             f_test_w.writerow(idx_test)
-#
-#         print("[!] Splitting done!")
-#
-#     # reading idx from the files
-#     for section in ['train', 'val', 'test']:
-#         with open(root_idx_dir + dataset.name + '_'+ section + '.index', 'r') as f:
-#             reader = csv.reader(f)
-#             all_idx[section] = [list(map(int, idx)) for idx in reader]
-#     return all_idx
 
 class DGLFormDataset(torch.utils.data.Dataset):
     """
@@ -203,19 +142,48 @@ def self_loop(g):
     new_g.edata['feat'] = torch.zeros(new_g.number_of_edges())
     return new_g
 
-
+def positional_encoding(g, pos_enc_dim, framework = 'pyg'):
+    """
+        Graph positional encoding v/ Laplacian eigenvectors
+    """
+    # Laplacian,for the pyg
+    if framework == 'pyg':
+        L = get_laplacian(g.edge_index,normalization='sym',dtype = torch.float64)
+        L = csr_matrix((L[1], (L[0][0], L[0][1])), shape=(g.num_nodes, g.num_nodes))
+        # Eigenvectors with scipy
+        # EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
+        EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim + 1, which='SR', tol=1e-2)  # for 40 PEs
+        EigVec = EigVec[:, EigVal.argsort()]  # increasing order
+        pos_enc = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1].astype(np.float32)).float()
+        return pos_enc
+        # add astype to discards the imaginary part to satisfy the version change pytorch1.5.0
+    elif framework == 'dgl':
+        A = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
+        N = sp.diags(dgl.backend.asnumpy(g.in_degrees()).clip(1) ** -0.5, dtype=float)
+        L = sp.eye(g.number_of_nodes()) - N * A * N
+        # Eigenvectors with scipy
+        # EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
+        EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim + 1, which='SR', tol=1e-2)  # for 40 PEs
+        EigVec = EigVec[:, EigVal.argsort()]  # increasing order
+        g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1].astype(np.float32)).float()
+        # add astype to discards the imaginary part to satisfy the version change pytorch1.5.0
 
     
 class PlanetoidDataset(InMemoryDataset):
-    def __init__(self, name):
+    def __init__(self, name, use_node_embedding = False):
         t0 = time.time()
         self.name = name
-        data_dir = 'data/SBMs'
+        data_dir = 'data/planetoid'
         #dataset = TUDataset(self.name, hidden_size=1)
         # dataset = LegacyTUDataset(self.name, hidden_size=1) # dgl 4.0
         self.dataset = pyg.datasets.Planetoid(root=data_dir, name= name ,split = 'full')
 
         print("[!] Dataset: ", self.name)
+        if use_node_embedding:
+            embedding = torch.load(data_dir + '/embedding_'+name + '.pt', map_location='cpu')
+            # self.dataset.data.x = embedding
+            # self.laplacian = positional_encoding(self.dataset[0], 200, framework = 'pyg')
+            self.dataset.data.x = torch.cat([self.dataset.data.x, embedding], dim=-1)
 
         # this function splits data into train/val/test and returns the indices
         self.all_idx = get_all_split_idx(self.dataset)

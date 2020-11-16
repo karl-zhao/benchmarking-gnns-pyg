@@ -96,7 +96,6 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     avg_train_acc = []
     avg_val_acc = []
     avg_convergence_epochs = []
-
     t0 = time.time()
     per_epoch_time = []
     
@@ -115,112 +114,120 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     # At any point you can hit Ctrl + C to break out of training early.
     try:
         for split_number in range(10):
-
-            t0_split = time.time()
-            log_dir = os.path.join(root_log_dir, "RUN_" + str(split_number))
-            writer = SummaryWriter(log_dir=log_dir)
-
+            training_scores, val_scores, test_scores, epochs = [], [], [], []
             # setting seeds
             random.seed(params['seed'])
             np.random.seed(params['seed'])
             torch.manual_seed(params['seed'])
             if device.type == 'cuda':
                 torch.cuda.manual_seed(params['seed'])
+            # Mitigate bad random initializations
 
-            print("RUN NUMBER: ", split_number)
-            train_idx, val_idx, test_idx = dataset.train_idx[split_number], dataset.val_idx[split_number], dataset.test_idx[split_number]
+            train_idx, val_idx, test_idx = dataset.train_idx[split_number], dataset.val_idx[split_number], \
+                                           dataset.test_idx[split_number]
             print("Training Nodes: ", len(train_idx))
             print("Validation Nodes: ", len(val_idx))
             print("Test Nodes: ", len(test_idx))
             print("Number of Classes: ", net_params['n_classes'])
+            for run in range(3):
+                t0_split = time.time()
+                print("RUN NUMBER:", split_number, run)
+                log_dir = os.path.join(root_log_dir, "RUN_" + str(split_number))
+                writer = SummaryWriter(log_dir=log_dir)
+                model = gnn_model(MODEL_NAME, net_params)
+                model = model.to(device)
+                optimizer = optim.Adam(model.parameters(), lr=params['init_lr'], weight_decay=params['weight_decay'])
+                scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
+                                                                 factor=params['lr_reduce_factor'],
+                                                                 patience=params['lr_schedule_patience'],
+                                                                 verbose=True)
 
-            model = gnn_model(MODEL_NAME, net_params)
-            model = model.to(device)
-            optimizer = optim.Adam(model.parameters(), lr=params['init_lr'], weight_decay=params['weight_decay'])
-            scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min',
-                                                             factor=params['lr_reduce_factor'],
-                                                             patience=params['lr_schedule_patience'],
-                                                             verbose=True)
+                epoch_train_losses, epoch_val_losses = [], []
+                epoch_train_accs, epoch_val_accs = [], []
 
-            epoch_train_losses, epoch_val_losses = [], []
-            epoch_train_accs, epoch_val_accs = [], [] 
+                # import train functions for all other GCNs
+                from train.train_Planetoid_node_classification import train_epoch_sparse as train_epoch, evaluate_network_sparse as evaluate_network
 
-            # import train functions for all other GCNs
-            from train.train_Planetoid_node_classification import train_epoch_sparse as train_epoch, evaluate_network_sparse as evaluate_network
-  
-            with tqdm(range(params['epochs']), ncols= 0) as t:
-                for epoch in t:
+                with tqdm(range(params['epochs']), ncols= 0) as t:
+                    for epoch in t:
 
-                    t.set_description('Epoch %d' % epoch)    
+                        t.set_description('Epoch %d' % epoch)
 
-                    start = time.time()
-                    # for all other models common train function
-                    epoch_train_loss, epoch_train_acc, optimizer = train_epoch(model, optimizer, device, dataset, train_idx)
+                        start = time.time()
+                        # for all other models common train function
+                        epoch_train_loss, epoch_train_acc, optimizer = train_epoch(model, optimizer, device, dataset, train_idx)
 
-                    epoch_val_loss, epoch_val_acc = evaluate_network(model, device, dataset, val_idx)
-                    _, epoch_test_acc = evaluate_network(model, device, dataset, test_idx)
+                        epoch_val_loss, epoch_val_acc = evaluate_network(model, device, dataset, val_idx)
+                        _, epoch_test_acc = evaluate_network(model, device, dataset, test_idx)
 
-                    epoch_train_losses.append(epoch_train_loss)
-                    epoch_val_losses.append(epoch_val_loss)
-                    epoch_train_accs.append(epoch_train_acc)
-                    epoch_val_accs.append(epoch_val_acc)
+                        epoch_train_losses.append(epoch_train_loss)
+                        epoch_val_losses.append(epoch_val_loss)
+                        epoch_train_accs.append(epoch_train_acc)
+                        epoch_val_accs.append(epoch_val_acc)
 
-                    writer.add_scalar('train/_loss', epoch_train_loss, epoch)
-                    writer.add_scalar('val/_loss', epoch_val_loss, epoch)
-                    writer.add_scalar('train/_acc', epoch_train_acc, epoch)
-                    writer.add_scalar('val/_acc', epoch_val_acc, epoch)
-                    writer.add_scalar('test/_acc', epoch_test_acc, epoch)
-                    writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
+                        writer.add_scalar('train/_loss', epoch_train_loss, epoch)
+                        writer.add_scalar('val/_loss', epoch_val_loss, epoch)
+                        writer.add_scalar('train/_acc', epoch_train_acc, epoch)
+                        writer.add_scalar('val/_acc', epoch_val_acc, epoch)
+                        writer.add_scalar('test/_acc', epoch_test_acc, epoch)
+                        writer.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
 
-                    t.set_postfix(time=time.time()-start, lr=optimizer.param_groups[0]['lr'],
-                                  train_loss=epoch_train_loss, val_loss=epoch_val_loss,
-                                  train_acc=epoch_train_acc, val_acc=epoch_val_acc,
-                                  test_acc=epoch_test_acc)  
+                        t.set_postfix(time=time.time()-start, lr=optimizer.param_groups[0]['lr'],
+                                      train_loss=epoch_train_loss, val_loss=epoch_val_loss,
+                                      train_acc=epoch_train_acc, val_acc=epoch_val_acc,
+                                      test_acc=epoch_test_acc)
 
-                    per_epoch_time.append(time.time()-start)
+                        per_epoch_time.append(time.time()-start)
 
-                    # Saving checkpoint
-                    ckpt_dir = os.path.join(root_ckpt_dir, "RUN_" + str(split_number))
-                    if not os.path.exists(ckpt_dir):
-                        os.makedirs(ckpt_dir)
-                    # torch.save(model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + str(epoch)))
-                    # it is for save the models.
-                    files = glob.glob(ckpt_dir + '/*.pkl')
-                    for file in files:
-                        epoch_nb = file.split('_')[-1]
-                        epoch_nb = int(epoch_nb.split('.')[0])
-                        if epoch_nb < epoch-1:
-                            os.remove(file)
+                        # Saving checkpoint
+                        ckpt_dir = os.path.join(root_ckpt_dir, "RUN_" + str(split_number))
+                        if not os.path.exists(ckpt_dir):
+                            os.makedirs(ckpt_dir)
+                        # torch.save(model.state_dict(), '{}.pkl'.format(ckpt_dir + "/epoch_" + str(epoch)))
+                        # it is for save the models.
+                        files = glob.glob(ckpt_dir + '/*.pkl')
+                        for file in files:
+                            epoch_nb = file.split('_')[-1]
+                            epoch_nb = int(epoch_nb.split('.')[0])
+                            if epoch_nb < epoch-1:
+                                os.remove(file)
 
-                    scheduler.step(epoch_val_loss)
+                        scheduler.step(epoch_val_loss)
 
-                    # it used to test the scripts
-                    # if epoch == 1:
-                    #     break
+                        # it used to test the scripts
+                        # if epoch == 1:
+                        #     break
 
-                    if optimizer.param_groups[0]['lr'] < params['min_lr']:
-                        print("\n!! LR EQUAL TO MIN LR SET.")
-                        break
-                        
-                    # Stop training after params['max_time'] hours
-                    if time.time()-t0_split > params['max_time']*3600/10:       # Dividing max_time by 10, since there are 10 runs in TUs
-                        print('-' * 89)
-                        print("Max_time for one train-val-test split experiment elapsed {:.3f} hours, so stopping".format(params['max_time']/10))
-                        break
+                        if optimizer.param_groups[0]['lr'] < params['min_lr']:
+                            print("\n!! LR EQUAL TO MIN LR SET.")
+                            break
 
-            _, test_acc = evaluate_network(model, device, dataset, test_idx)
-            _, val_acc = evaluate_network(model, device, dataset, val_idx)
-            _, train_acc = evaluate_network(model, device, dataset, train_idx)
+                        # Stop training after params['max_time'] hours
+                        if time.time()-t0_split > params['max_time']*3600/10:       # Dividing max_time by 10, since there are 10 runs in TUs
+                            print('-' * 89)
+                            print("Max_time for one train-val-test split experiment elapsed {:.3f} hours, so stopping".format(params['max_time']/10))
+                            break
 
-            avg_val_acc.append(val_acc)
-            avg_test_acc.append(test_acc)
-            avg_train_acc.append(train_acc)
-            avg_convergence_epochs.append(epoch)
+                _, test_acc = evaluate_network(model, device, dataset, test_idx)
+                _, val_acc = evaluate_network(model, device, dataset, val_idx)
+                _, train_acc = evaluate_network(model, device, dataset, train_idx)
+                training_scores.append(train_acc)
+                val_scores.append(val_acc)
+                test_scores.append(test_acc)
+                epochs.append(epoch)
+            training_score = sum(training_scores) / 3
+            val_score = sum(val_scores) / 3
+            test_score = sum(test_scores) / 3
+            epoch_score = sum(epochs) / 3
+            avg_val_acc.append(val_score)
+            avg_test_acc.append(test_score)
+            avg_train_acc.append(training_score)
+            avg_convergence_epochs.append(epoch_score)
 
-            print("Test Accuracy [LAST EPOCH]: {:.4f}".format(test_acc))
-            print("Val Accuracy: {:.4f}".format(val_acc))
-            print("Train Accuracy [LAST EPOCH]: {:.4f}".format(train_acc))
-            print("Convergence Time (Epochs): {:.4f}".format(epoch))
+            print("Test Accuracy [LAST EPOCH]: {:.4f}".format(test_score))
+            print("Val Accuracy: {:.4f}".format(val_score))
+            print("Train Accuracy [LAST EPOCH]: {:.4f}".format(training_score))
+            print("Convergence Time (Epochs): {:.4f}".format(epoch_score))
     
     except KeyboardInterrupt:
         print('-' * 89)
@@ -246,10 +253,11 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     """
     with open(write_file_name + '.txt', 'w') as f:
         f.write("""Dataset: {},\nModel: {}\n\nparams={}\n\nnet_params={}\n\n{}\n\nTotal Parameters: {}\n\n
-    FINAL RESULTS\nTEST ACCURACY averaged: {:.4f} with s.d. {:.4f}\nTRAIN ACCURACY averaged: {:.4f} with s.d. {:.4f}\n\n
+    FINAL RESULTS\nTEST ACCURACY averaged: {:.4f} with s.d. {:.4f}\nval ACCURACY averaged: {:.4f} with s.d. {:.4f}\nTRAIN ACCURACY averaged: {:.4f} with s.d. {:.4f}\n\n
     Average Convergence Time (Epochs): {:.4f} with s.d. {:.4f}\nTotal Time Taken: {:.4f} hrs\nAverage Time Per Epoch: {:.4f} s\n\n\nAll Splits Test Accuracies: {}"""\
           .format(dataset.name, MODEL_NAME, params, net_params, model, net_params['total_param'],
                   np.mean(np.array(avg_test_acc))*100, np.std(avg_test_acc)*100,
+                  np.mean(np.array(avg_val_acc))*100, np.std(avg_val_acc)*100,
                   np.mean(np.array(avg_train_acc))*100, np.std(avg_train_acc)*100,
                   np.mean(avg_convergence_epochs), np.std(avg_convergence_epochs),
                (time.time()-t0)/3600, np.mean(per_epoch_time), avg_test_acc))

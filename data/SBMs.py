@@ -13,6 +13,7 @@ from tqdm import tqdm
 from torch_geometric.data import InMemoryDataset
 from torch_geometric.data import Data
 from scipy.sparse import csr_matrix
+from torch_geometric.utils import get_laplacian
 
 
 class load_SBMsDataSetDGL(torch.utils.data.Dataset):
@@ -167,10 +168,13 @@ class SBMsDatasetpyg(InMemoryDataset):
         # Graph positional encoding v/ Laplacian eigenvectors
         # self.train.graph_lists = [positional_encoding(g, pos_enc_dim) for g in self.train.graph_lists]
         # iter(self.train)
-        self.train.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(dataset.train)]
-
-        self.val.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(dataset.train)]
-        self.test.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(dataset.train)]
+        self.train.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(self.train)]
+        self.val.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(self.val)]
+        self.test.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(self.test)]
+        # self.train.data.pos_enc = [torch.cat(g.pos_enc,dim=0) for _, g in enumerate(self.train.graph_lists)]
+        self.train.data, self.train.slices = self.collate(self.train.graph_lists)
+        self.val.data, self.val.slices = self.collate(self.val.graph_lists)
+        self.test.data, self.test.slices = self.collate(self.test.graph_lists)
 
 
 class SBMsDatasetDGL(torch.utils.data.Dataset):
@@ -226,7 +230,7 @@ def positional_encoding(g, pos_enc_dim, framework = 'dgl'):
     # Laplacian,for the pyg
     if framework == 'pyg':
         L = get_laplacian(g.edge_index,normalization='sym',dtype = torch.float64)
-        L = csr_matrix((L[1], (L[0][0], a1[0][1])), shape=(g.num_nodes, g.num_nodes))
+        L = csr_matrix((L[1], (L[0][0], L[0][1])), shape=(g.num_nodes, g.num_nodes))
         # Eigenvectors with scipy
         # EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
         EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim + 1, which='SR', tol=1e-2)  # for 40 PEs

@@ -9,9 +9,10 @@ from data.TSP import TSPDataset
 from data.COLLAB import COLLABDataset
 from data.CSL import CSLDataset
 from data.planetoids import PlanetoidDataset
+from data.ogbn import ogbnDatasetpyg
 
 
-def LoadData(DATASET_NAME,framework = 'dgl'):
+def LoadData(DATASET_NAME, use_node_embedding = False, framework = 'dgl'):
     """
         This function is called in the main.py file 
         returns:
@@ -48,6 +49,10 @@ def LoadData(DATASET_NAME,framework = 'dgl'):
         return CSLDataset(DATASET_NAME)
 
     if DATASET_NAME in ['Cora', 'Citeseer', 'Pubmed']:
-        return PlanetoidDataset(DATASET_NAME)
+        return PlanetoidDataset(DATASET_NAME, use_node_embedding = use_node_embedding)
+
+    if DATASET_NAME in ['ogbn-arxiv', 'ogbn-proteins', 'ogbn-mag', 'ogbn-products']:
+        return ogbnDatasetpyg(name=DATASET_NAME, use_node_embedding = use_node_embedding)
+
 
     

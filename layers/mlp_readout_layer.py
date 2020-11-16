@@ -22,3 +22,16 @@ class MLPReadout(nn.Module):
             y = F.relu(y)
         y = self.FC_layers[self.L](y)
         return y
+
+
+# class MLPReadout(nn.Module):
+#
+#     def __init__(self, input_dim, output_dim):  # L=nb_hidden_layers
+#         super().__init__()
+#         FC_layers = nn.Linear(input_dim, output_dim, bias=True)
+#
+#
+#     def forward(self, x):
+#         y = x
+#         y = self.FC_layers(y)
+#         return y

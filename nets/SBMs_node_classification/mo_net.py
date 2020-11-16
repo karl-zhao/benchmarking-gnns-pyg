@@ -1,10 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+# from torch_scatter import scatter_add
+# from num_nodes import maybe_num_nodes
 import dgl
-
+from torch_geometric.nn.conv import MessagePassing
 import numpy as np
+import torch.nn as nn
+from torch import Tensor
+# from torch_geometric.utils import degree
+from torch_scatter import scatter_add
 
 """
     GMM: Gaussian Mixture Model Convolution layer
@@ -56,7 +61,7 @@ class MoNet(nn.Module):
 
     def forward(self, g, h, e):
         h = self.embedding_h(h)
-        
+
         # computing the 'pseudo' named tensor which depends on node degrees
         g.ndata['deg'] = g.in_degrees()
         g.apply_edges(self.compute_pseudo)
@@ -70,8 +75,10 @@ class MoNet(nn.Module):
     def compute_pseudo(self, edges):
         # compute pseudo edge features for MoNet
         # to avoid zero division in case in_degree is 0, we add constant '1' in all node degrees denoting self-loop
-        srcs = 1/np.sqrt(edges.src['deg']+1)
-        dsts = 1/np.sqrt(edges.dst['deg']+1)
+        # srcs = 1/np.sqrt((edges.src['deg']+1).cpu())
+        # dsts = 1/np.sqrt((edges.src['deg']+1).cpu())
+        srcs = 1 / (edges.src['deg'] + 1).float().sqrt()
+        dsts = 1 / (edges.src['deg'] + 1).float().sqrt()
         pseudo = torch.cat((srcs.unsqueeze(-1), dsts.unsqueeze(-1)), dim=1)
         return {'pseudo': pseudo}
         
@@ -97,7 +104,7 @@ class MoNet(nn.Module):
     Geometric Deep Learning on Graphs and Manifolds using Mixture Model CNNs (Federico Monti et al., CVPR 2017)
     https://arxiv.org/pdf/1611.08402.pdf
 """
-class MoNetNet_pyg(nn.Module):
+class MoNetNet_pyg(MessagePassing):
     def __init__(self, net_params):
         super().__init__()
         self.name = 'MoNet'
@@ -119,7 +126,6 @@ class MoNetNet_pyg(nn.Module):
         aggr_type = "mean"
 
         self.embedding_h = nn.Embedding(in_dim, hidden_dim)
-        self.embedding_e = nn.Linear(1, dim)  # edge feat is a float
         self.layers = nn.ModuleList()
         self.pseudo_proj = nn.ModuleList()
         self.batchnorm_h = nn.ModuleList()
@@ -129,21 +135,29 @@ class MoNetNet_pyg(nn.Module):
                                         root_weight = True, bias = True))
             if self.batch_norm:
                 self.batchnorm_h.append(nn.BatchNorm1d(hidden_dim))
+            self.pseudo_proj.append(nn.Sequential(nn.Linear(2, dim), nn.Tanh()))
         # Output layer
         self.layers.append(GMMConv(hidden_dim, out_dim, dim, kernel, separate_gaussians = False ,aggr = aggr_type,
                                         root_weight = True, bias = True))
         if self.batch_norm:
             self.batchnorm_h.append(nn.BatchNorm1d(out_dim))
-
+        self.pseudo_proj.append(nn.Sequential(nn.Linear(2, dim), nn.Tanh()))
         self.MLP_layer = MLPReadout(out_dim, n_classes)
         # to do
 
     def forward(self, h, edge_index, e):
         h = self.embedding_h(h)
-        e = self.embedding_e(e) # edge feat is a float
+        edge_weight = torch.ones((edge_index.size(1),),
+                                         device = edge_index.device)
+        row, col = edge_index[0], edge_index[1]
+        deg = scatter_add(edge_weight, row, dim=0, dim_size=h.size(0))
+        deg_inv_sqrt = deg.pow_(-0.5)
+        deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float('inf'), 0)
+        pseudo = torch.cat((deg_inv_sqrt[row].unsqueeze(-1), deg_inv_sqrt[col].unsqueeze(-1)), dim=1)
+
         for i in range(self.n_layers):
             h_in = h
-            h = self.layers[i](h, edge_index, e)
+            h = self.layers[i](h, edge_index, self.pseudo_proj[i](pseudo))
             if self.batch_norm:
                 h = self.batchnorm_h[i](h)  # batch normalization
             h = F.relu(h)  # non-linear activation
@@ -152,6 +166,7 @@ class MoNetNet_pyg(nn.Module):
             h = F.dropout(h, self.dropout, training=self.training)
 
         return self.MLP_layer(h)
+
 
     def loss(self, pred, label):
 

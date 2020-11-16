@@ -102,7 +102,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
             print("[!] Adding graph self-loops for GCN/GAT models (central node trick).")
             dataset._add_self_loops()
     
-    if MODEL_NAME in ['GatedGCN']:
+    if MODEL_NAME in ['GatedGCN_pyg','ResGatedGCN_pyg']:
         if net_params['pos_enc']:
             print("[!] Adding graph positional encoding.")
             dataset._add_positional_encodings(net_params['pos_enc_dim'])
@@ -248,10 +248,10 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     """
     with open(write_file_name + '.txt', 'w') as f:
         f.write("""Dataset: {},\nModel: {}\n\nparams={}\n\nnet_params={}\n\n{}\n\nTotal Parameters: {}\n\n
-    FINAL RESULTS\nTEST ACCURACY: {:.4f}\nTRAIN ACCURACY: {:.4f}\n\n
+    FINAL RESULTS\nTEST ACCURACY: {:.4f}\nval ACCURACY: {:.4f}\nTRAIN ACCURACY: {:.4f}\n\n
     Convergence Time (Epochs): {:.4f}\nTotal Time Taken: {:.4f} hrs\nAverage Time Per Epoch: {:.4f} s\n\n\n"""\
           .format(DATASET_NAME, MODEL_NAME, params, net_params, model, net_params['total_param'],
-                  test_acc, train_acc, epoch, (time.time()-start0)/3600, np.mean(per_epoch_time)))
+                  test_acc, val_acc,train_acc, epoch, (time.time()-start0)/3600, np.mean(per_epoch_time)))
 
         
 

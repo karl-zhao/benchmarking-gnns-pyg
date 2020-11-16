@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from torch_scatter import scatter_add
 import dgl
 
 import numpy as np
@@ -77,19 +77,8 @@ class MoNet(nn.Module):
         
     def loss(self, pred, label):
 
-        # calculating label weights for weighted loss computation
-        V = label.size(0)
-        label_count = torch.bincount(label)
-        label_count = label_count[label_count.nonzero()].squeeze()
-        cluster_sizes = torch.zeros(self.n_classes).long().to(self.device)
-        cluster_sizes[torch.unique(label)] = label_count
-        weight = (V - cluster_sizes).float() / V
-        weight *= (cluster_sizes>0).float()
-        
-        # weighted cross-entropy for unbalanced classes
-        criterion = nn.CrossEntropyLoss(weight=weight)
+        criterion = nn.CrossEntropyLoss()
         loss = criterion(pred, label)
-
         return loss
 
 """
@@ -119,7 +108,7 @@ class MoNetNet_pyg(nn.Module):
         aggr_type = "mean"
 
         self.embedding_h = nn.Linear(in_dim_node, hidden_dim)       # node feat is an integer
-        self.embedding_e = nn.Linear(1, dim)  # edge feat is a float
+        # self.embedding_e = nn.Linear(1, dim)  # edge feat is a float
         self.layers = nn.ModuleList()
         self.pseudo_proj = nn.ModuleList()
         self.batchnorm_h = nn.ModuleList()
@@ -129,21 +118,30 @@ class MoNetNet_pyg(nn.Module):
                                         root_weight = True, bias = True))
             if self.batch_norm:
                 self.batchnorm_h.append(nn.BatchNorm1d(hidden_dim))
+            self.pseudo_proj.append(nn.Sequential(nn.Linear(2, dim), nn.Tanh()))
         # Output layer
         self.layers.append(GMMConv(hidden_dim, out_dim, dim, kernel, separate_gaussians = False ,aggr = aggr_type,
                                         root_weight = True, bias = True))
         if self.batch_norm:
             self.batchnorm_h.append(nn.BatchNorm1d(out_dim))
+        self.pseudo_proj.append(nn.Sequential(nn.Linear(2, dim), nn.Tanh()))
 
         self.MLP_layer = MLPReadout(out_dim, n_classes)
         # to do
 
     def forward(self, h, edge_index, e):
         h = self.embedding_h(h)
-        e = self.embedding_e(e) # edge feat is a float
+        edge_weight = torch.ones((edge_index.size(1),),
+                                         device = edge_index.device)
+        row, col = edge_index[0], edge_index[1]
+        deg = scatter_add(edge_weight, row, dim=0, dim_size=h.size(0))
+        deg_inv_sqrt = deg.pow_(-0.5)
+        deg_inv_sqrt.masked_fill_(deg_inv_sqrt == float('inf'), 0)
+        pseudo = torch.cat((deg_inv_sqrt[row].unsqueeze(-1), deg_inv_sqrt[col].unsqueeze(-1)), dim=1)
+
         for i in range(self.n_layers):
             h_in = h
-            h = self.layers[i](h, edge_index, e)
+            h = self.layers[i](h, edge_index, self.pseudo_proj[i](pseudo))
             if self.batch_norm:
                 h = self.batchnorm_h[i](h)  # batch normalization
             h = F.relu(h)  # non-linear activation
@@ -155,17 +153,6 @@ class MoNetNet_pyg(nn.Module):
 
     def loss(self, pred, label):
 
-        # calculating label weights for weighted loss computation
-        V = label.size(0)
-        label_count = torch.bincount(label)
-        label_count = label_count[label_count.nonzero()].squeeze()
-        cluster_sizes = torch.zeros(self.n_classes).long().to(self.device)
-        cluster_sizes[torch.unique(label)] = label_count
-        weight = (V - cluster_sizes).float() / V
-        weight *= (cluster_sizes > 0).float()
-
-        # weighted cross-entropy for unbalanced classes
-        criterion = nn.CrossEntropyLoss(weight=weight)
+        criterion = nn.CrossEntropyLoss()
         loss = criterion(pred, label)
-
         return loss
