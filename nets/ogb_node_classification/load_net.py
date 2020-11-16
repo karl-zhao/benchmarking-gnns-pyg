@@ -19,11 +19,6 @@ from gcn_lib.sparse import GraphConv as GraphConvNet
 def GatedGCN(net_params):
     return GatedGCNNet(net_params)
 
-def GCN(net_params):
-    return GCNNet(net_params)
-
-def GAT(net_params):
-    return GATNet(net_params)
 
 def GraphSage(net_params):
     return GraphSageNet(net_params)
@@ -71,8 +66,6 @@ def MoNet_pyg(net_params):
 def gnn_model(MODEL_NAME, net_params):
     models = {
         'GatedGCN': GatedGCN,
-        'GCN': GCN,
-        'GAT': GAT,
         'GraphSage': GraphSage,
         'MLP': MLP,
         'GIN': GIN,
