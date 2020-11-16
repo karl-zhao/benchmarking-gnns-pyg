@@ -4,9 +4,9 @@
         "id": 0
     },
     
-    "model": "GCN_pyg",
+    "model": "GraphSage_pyg",
     
-    "out_dir": "out/SBMs_node_classification/",
+    "out_dir": "out/Planetoid_node_classification/",
     
     "params": {
         "seed": 41,
@@ -22,13 +22,13 @@
     
     "net_params": {
         "L": 4,
-        "hidden_dim": 146,
-        "out_dim": 146,
+        "hidden_dim": 110,
+        "out_dim": 110,
         "residual": true,
         "readout": "mean",
         "in_feat_dropout": 0.0,
         "dropout": 0.0,
         "batch_norm": true,
-        "self_loop": false
+        "sage_aggregator": "maxpool"
     }
 }
