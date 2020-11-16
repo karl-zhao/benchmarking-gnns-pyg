@@ -17,29 +17,12 @@ python main_molecules_graph_regression.py --dataset ZINC --gpu_id 0 --config 'co
 ```
 The training and network parameters for each dataset and network is stored in a json file in the [`configs/`](../configs) directory.
 
-
-
-
-
-
-
-
-
-
-
-
 <br>
 
-### 1.2 In jupyter notebook
-```
-# Run the notebook file (at the root of the project)
-conda activate benchmark_gnn 
-jupyter notebook
-```
-Use [`main_molecules_graph_regression.ipynb`](../main_molecules_graph_regression.ipynb) notebook to explore the code and do the training interactively.
+### 1.2 run the scripts
+Run the [script](../scripts/),you can see the scripts for detail.
 
-
-
+if want to use the node2vec embedding, first run [script](../data/), node2vec, for create the embeddings.
 
 <br>
 
@@ -72,66 +55,6 @@ tensorboard --logdir='./' --port 6006
 
 
 <br>
-
-## 3. Reproduce results (4 runs on all, except CSL and TUs)
-
-
-```
-# At the root of the project 
-bash scripts/SuperPixels/script_main_superpixels_graph_classification_MNIST_100k.sh # run MNIST dataset for 100k params
-bash scripts/SuperPixels/script_main_superpixels_graph_classification_MNIST_500k.sh # run MNIST dataset for 500k params; WL-GNNs
-bash scripts/SuperPixels/script_main_superpixels_graph_classification_CIFAR10_100k.sh # run CIFAR10 dataset for 100k params
-bash scripts/SuperPixels/script_main_superpixels_graph_classification_CIFAR10_500k.sh # run CIFAR10 dataset for 500k params; WL-GNNs
-
-bash scripts/ZINC/script_main_molecules_graph_regression_ZINC_100k.sh # run ZINC dataset for 100k params
-bash scripts/ZINC/script_main_molecules_graph_regression_ZINC_500k.sh # run ZINC dataset for 500k params
-bash scripts/ZINC/script_main_molecules_graph_regression_ZINC_PE_GatedGCN_500k.sh # run ZINC dataset with PE for GatedGCN
-
-bash scripts/SBMs/script_main_SBMs_node_classification_PATTERN_100k.sh # run PATTERN dataset for 100k params
-bash scripts/SBMs/script_main_SBMs_node_classification_PATTERN_500k.sh # run PATTERN dataset for 500k params
-bash scripts/SBMs/script_main_SBMs_node_classification_PATTERN_PE_GatedGCN_500k.sh # run PATTERN dataset with PE for GatedGCN
-bash scripts/SBMs/script_main_SBMs_node_classification_CLUSTER_100k.sh # run CLUSTER dataset for 100k params
-bash scripts/SBMs/script_main_SBMs_node_classification_CLUSTER_500k.sh # run CLUSTER dataset for 500k params
-bash scripts/SBMs/script_main_SBMs_node_classification_CLUSTER_PE_GatedGCN_500k.sh # run CLUSTER dataset with PE for GatedGCN
-
-bash scripts/TSP/script_main_TSP_edge_classification_100k.sh # run TSP dataset for 100k params
-bash scripts/TSP/script_main_TSP_edge_classification_edge_feature_analysis.sh # run TSP dataset for edge feature analysis 
-
-bash scripts/COLLAB/script_main_COLLAB_edge_classification_40k.sh # run OGBL-COLLAB dataset for 40k params
-bash scripts/COLLAB/script_main_COLLAB_edge_classification_edge_feature_analysis.sh # run OGBL-COLLAB dataset for edge feature analysis 
-bash scripts/COLLAB/script_main_COLLAB_edge_classification_PE_GatedGCN_40k.sh # run OGBL-COLLAB dataset with PE for GatedGCN
-
-bash scripts/CSL/script_main_CSL_graph_classification_20_seeds.sh # run CSL dataset without node features on 20 seeds
-bash scripts/CSL/script_main_CSL_graph_classification_PE_20_seeds.sh # run CSL dataset with PE on 20 seeds
-
-bash scripts/TU/script_main_TUs_graph_classification_100k_seed1.sh # run TU datasets for 100k params on seed1
-bash scripts/TU/script_main_TUs_graph_classification_100k_seed2.sh # run TU datasets for 100k params on seed2
-```
-
-Scripts are [located](../scripts/) at the `scripts/` directory of the repository.
-
- 
-
- <br>
-
-## 4. Generate statistics obtained over mulitple runs (except CSL and TUs)
-After running a script, statistics (mean and standard variation) can be generated from a notebook. For example, after running the script `scripts/ZINC/script_main_molecules_graph_regression_ZINC_100k.sh`, go to the results folder `out/molecules_graph_regression/results/`, and run the [notebook](../scripts/StatisticalResults/generate_statistics_molecules_graph_regression_ZINC_100k.ipynb) `scripts/StatisticalResults/generate_statistics_molecules_graph_regression_ZINC_100k.ipynb` to generate the statistics.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 <br><br><br>
