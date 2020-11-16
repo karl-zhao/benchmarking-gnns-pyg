@@ -122,18 +122,18 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
             if device.type == 'cuda':
                 torch.cuda.manual_seed(params['seed'])
             # Mitigate bad random initializations
+
+            train_idx, val_idx, test_idx = dataset.train_idx[split_number], dataset.val_idx[split_number], \
+                                           dataset.test_idx[split_number]
+            print("Training Nodes: ", len(train_idx))
+            print("Validation Nodes: ", len(val_idx))
+            print("Test Nodes: ", len(test_idx))
+            print("Number of Classes: ", net_params['n_classes'])
             for run in range(3):
                 t0_split = time.time()
+                print("RUN NUMBER:", split_number, run)
                 log_dir = os.path.join(root_log_dir, "RUN_" + str(split_number))
                 writer = SummaryWriter(log_dir=log_dir)
-
-                print("RUN NUMBER: ", split_number)
-                train_idx, val_idx, test_idx = dataset.train_idx[split_number], dataset.val_idx[split_number], dataset.test_idx[split_number]
-                print("Training Nodes: ", len(train_idx))
-                print("Validation Nodes: ", len(val_idx))
-                print("Test Nodes: ", len(test_idx))
-                print("Number of Classes: ", net_params['n_classes'])
-
                 model = gnn_model(MODEL_NAME, net_params)
                 model = model.to(device)
                 optimizer = optim.Adam(model.parameters(), lr=params['init_lr'], weight_decay=params['weight_decay'])
@@ -253,10 +253,11 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     """
     with open(write_file_name + '.txt', 'w') as f:
         f.write("""Dataset: {},\nModel: {}\n\nparams={}\n\nnet_params={}\n\n{}\n\nTotal Parameters: {}\n\n
-    FINAL RESULTS\nTEST ACCURACY averaged: {:.4f} with s.d. {:.4f}\nTRAIN ACCURACY averaged: {:.4f} with s.d. {:.4f}\n\n
+    FINAL RESULTS\nTEST ACCURACY averaged: {:.4f} with s.d. {:.4f}\nval ACCURACY averaged: {:.4f} with s.d. {:.4f}\nTRAIN ACCURACY averaged: {:.4f} with s.d. {:.4f}\n\n
     Average Convergence Time (Epochs): {:.4f} with s.d. {:.4f}\nTotal Time Taken: {:.4f} hrs\nAverage Time Per Epoch: {:.4f} s\n\n\nAll Splits Test Accuracies: {}"""\
           .format(dataset.name, MODEL_NAME, params, net_params, model, net_params['total_param'],
                   np.mean(np.array(avg_test_acc))*100, np.std(avg_test_acc)*100,
+                  np.mean(np.array(avg_val_acc))*100, np.std(avg_val_acc)*100,
                   np.mean(np.array(avg_train_acc))*100, np.std(avg_train_acc)*100,
                   np.mean(avg_convergence_epochs), np.std(avg_convergence_epochs),
                (time.time()-t0)/3600, np.mean(per_epoch_time), avg_test_acc))

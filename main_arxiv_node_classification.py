@@ -28,7 +28,6 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 import torch_geometric.transforms as T
 from ogb.nodeproppred import Evaluator
-from torch_geometric.data import RandomNodeSampler
 
 class DotDict(dict):
     def __init__(self, **kwds):
@@ -100,10 +99,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
             dataset._add_self_loops()
     if not net_params['edge_feat']:
         edge_feat_dim = 1
-        if DATASET_NAME == 'ogbn-mag':
-            dataset.dataset.edge_attr = torch.ones(dataset.dataset[0].num_edges, edge_feat_dim).type(torch.float32)
-        else:
-            dataset.dataset.data.edge_attr = torch.ones(dataset.dataset[0].num_edges, edge_feat_dim).type(torch.float32)
+        dataset.dataset.data.edge_attr = torch.ones(dataset.dataset[0].num_edges, edge_feat_dim).type(torch.float32)
 
     if net_params['pos_enc']:
         print("[!] Adding graph positional encoding.")
@@ -111,13 +107,13 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
         print('Time PE:',time.time()-start0)
     device = net_params['device']
     if DATASET_NAME == 'ogbn-mag':
-        dataset.split_idx['train'], dataset.split_idx['valid'], dataset.split_idx['test'] = dataset.split_idx['train']['paper'],\
-                                                                           dataset.split_idx['valid']['paper'], \
-                                                                           dataset.split_idx['test']['paper']
-    # else:
-    #     dataset.split_idx['train'], dataset.split_idx['valid'], dataset.split_idx['test'] = dataset.split_idx['train'].to(device), \
-    #                                                                       dataset.split_idx['valid'].to(device), \
-    #                                                                       dataset.split_idx['test'].to(device)
+        dataset.split_idx['train'], dataset.split_idx['valid'], dataset.split_idx['test'] = dataset.split_idx['train']['paper'].to(device),\
+                                                                           dataset.split_idx['valid']['paper'].to(device), \
+                                                                           dataset.split_idx['test']['paper'].to(device)
+    else:
+        dataset.split_idx['train'], dataset.split_idx['valid'], dataset.split_idx['test'] = dataset.split_idx['train'].to(device), \
+                                                                          dataset.split_idx['valid'].to(device), \
+                                                                          dataset.split_idx['test'].to(device)
 
     # transform = T.ToSparseTensor() To do to save memory
     # self.train.graph_lists = [positional_encoding(g, pos_enc_dim, framework='pyg') for _, g in enumerate(dataset.train)]
@@ -156,20 +152,12 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
     epoch_train_accs, epoch_val_accs = [], [] 
 
     # import train functions for all other GCNs
-    if DATASET_NAME == 'ogbn-mag' or DATASET_NAME == 'ogbn-products':
-        from train.train_ogb_node_classification import train_epoch as train_epoch, evaluate_network as evaluate_network
+    if DATASET_NAME == 'ogbn-arxiv':                    # , 'ogbn-proteins''
+        from train.train_ogb_node_classification import train_epoch_arxiv as train_epoch, evaluate_network_arxiv as evaluate_network
     elif DATASET_NAME == 'ogbn-proteins':
         from train.train_ogb_node_classification import train_epoch_proteins as train_epoch, evaluate_network_proteins as evaluate_network
-    data = dataset.dataset[0]
-    # Set split indices to masks.
-    for split in ['train', 'valid', 'test']:
-        mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-        mask[dataset.split_idx[split]] = True
-        data[f'{split}_mask'] = mask
-    num_parts = 5 if DATASET_NAME == 'ogbn-mag' else 40
-    train_loader = RandomNodeSampler(data, num_parts=num_parts, shuffle=True,
-                                 num_workers=0)
-    test_loader = RandomNodeSampler(data, num_parts=5, num_workers=0)
+    # elif DATASET_NAME == 'ogbn-mag':
+
     # At any point you can hit Ctrl + C to break out of training early.
     try:
         with tqdm(range(params['epochs']),ncols= 0) as t:
@@ -181,9 +169,9 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
 
 
                 # for all other models common train function
-                epoch_train_loss = train_epoch(model, optimizer, device, train_loader, epoch)
-
-                epoch_train_acc, epoch_val_acc, epoch_test_acc, epoch_val_loss = evaluate_network(model, device, test_loader, evaluator, epoch)
+                epoch_train_loss = train_epoch(model, optimizer, device, dataset.dataset[0], dataset.split_idx['train'])
+                    
+                epoch_train_acc, epoch_val_acc, epoch_test_acc, epoch_val_loss = evaluate_network(model, device, dataset, evaluator)
                 # _, epoch_test_acc = evaluate_network(model, device, test_loader, epoch)
                 
                 epoch_train_losses.append(epoch_train_loss)
@@ -238,7 +226,7 @@ def train_val_pipeline(MODEL_NAME, dataset, params, net_params, dirs):
         print('-' * 89)
         print('Exiting from training early because of KeyboardInterrupt')
 
-    train_acc, val_acc, test_acc, _ = evaluate_network(model, device, test_loader, evaluator, epoch)
+    train_acc, val_acc, test_acc, _ = evaluate_network(model, device, dataset, evaluator)
     train_acc, val_acc, test_acc = 100 * train_acc, 100 * val_acc, 100 * test_acc
     print("Test Accuracy: {:.4f}".format(test_acc))
     print("Val Accuracy: {:.4f}".format(val_acc))
