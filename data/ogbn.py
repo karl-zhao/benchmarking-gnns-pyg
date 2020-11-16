@@ -245,12 +245,13 @@ class PygNodeSBMsDataset(InMemoryDataset):
 class Data_idx(object):
 
 
-    def __init__(self, x=None, edge_index=None, edge_attr=None, y=None,
+    def __init__(self, x=None, edge_index=None, edge_attr=None, y=None, pos_enc = None,
                                                      **kwargs):
         self.x = x
         self.edge_index = edge_index
         self.y = y
         self.edge_attr = edge_attr
+        self.pos_enc = pos_enc
 
     def __len__(self):
         r"""The number of examples in the dataset."""
@@ -263,7 +264,12 @@ class Data_idx(object):
             x = self.x,
             edge_index = self.edge_index,
             y=self.y,
-            edge_attr=self.edge_attr)
+            edge_attr=self.edge_attr) if self.pos_enc == None else Data(x = self.x,
+                                                   edge_index = self.edge_index,
+                                                   y=self.y,
+                                                   edge_attr=self.edge_attr,
+                                                   pos_enc=self.pos_enc)
+
         return dataset
 #
 #     def __repr__(self):
@@ -321,9 +327,11 @@ class ogbnDatasetpyg(InMemoryDataset):
         if name == 'ogbn-arxiv':
             self.dataset = PygNodePropPredDataset(name=name, root=data_dir)
             self.split_idx = self.dataset.get_idx_split()
-            self.dataset.data.edge_index, self.edge_attr = to_undirected(self.dataset[0].edge_index, self.dataset[0].num_nodes)
+            self.dataset.data.edge_index, self.dataset.data.edge_attr = to_undirected(self.dataset[0].edge_index, self.dataset[0].num_nodes)
             self.dataset.data.y = self.dataset.data.y.squeeze(1)
             self.dataset.slices['edge_index'] = torch.tensor([0,self.dataset.data.edge_index.size(1)],dtype=torch.long)
+            self.dataset.slices['edge_attr'] = torch.tensor([0, self.dataset.data.edge_index.size(1)],
+                                                             dtype=torch.long)
         if name == 'ogbn-proteins':
             self.dataset = PygNodePropPredDataset(name=name, root=data_dir)
             self.split_idx = self.dataset.get_idx_split()
@@ -346,10 +354,22 @@ class ogbnDatasetpyg(InMemoryDataset):
                 edge_index=edge_index,
                 y=rel_data.y_dict['paper'],
                 edge_attr = self.edge_attr)
+        if name == 'ogbn-products':
+            self.dataset = PygNodePropPredDataset(name=name, root=data_dir)
+            self.split_idx = self.dataset.get_idx_split()
+            self.dataset.slices['edge_attr'] = torch.tensor([0, self.dataset.data.edge_index.size(1)],
+                                                             dtype=torch.long)
+            edge_feat_dim = 1
+            self.dataset.edge_attr = torch.ones(self.dataset[0].num_edges, edge_feat_dim).type(torch.float32)
 
         if use_node_embedding:
-            embedding = torch.load('data/embedding_' + name[5:] + '.pt', map_location='cpu')
+            print("use_node_embedding ...")
+            embedding = torch.load('data/ogbn/embedding_' + name[5:] + '.pt', map_location='cpu')
+
             self.dataset.data.x = torch.cat([self.dataset.data.x, embedding], dim=-1)
+            # self.dataset.data.embedding = embedding#torch.cat([self.dataset.data.x, embedding], dim=-1)
+            # self.dataset.slices['embedding'] = torch.tensor([0, self.dataset.data.x.size(0)],
+            #                                                 dtype=torch.long)
 
         # edge_attr.type =
         # edge_feat_dim = 1
@@ -358,13 +378,12 @@ class ogbnDatasetpyg(InMemoryDataset):
         print("[I] Finished loading.")
         print("[I] Data load time: {:.4f}s".format(time.time()-start))
 
-    def _add_positional_encodings(self, pos_enc_dim):
+    def _add_positional_encodings(self, pos_enc_dim, DATASET_NAME = None):
         # Graph positional encoding v/ Laplacian eigenvectors
         # self.train.graph_lists = [positional_encoding(g, pos_enc_dim) for g in self.train.graph_lists]
         # iter(self.train)
-        self.train.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(self.dataset[self.split_idx['train']])]
-        self.val.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(self.dataset[self.split_idx['valid']])]
-        self.test.graph_lists = [positional_encoding(g, pos_enc_dim, framework = 'pyg') for _, g in enumerate(self.dataset[self.split_idx['test']])]
+        self.graph_lists = [positional_encoding(self.dataset[0], pos_enc_dim, DATASET_NAME = DATASET_NAME)]
+        self.dataset.data, self.dataset.slices = self.collate(self.graph_lists)
 
     def __repr__(self):
         return '{}()'.format(self.__class__.__name__)
@@ -416,30 +435,33 @@ def self_loop(g):
 
 
 
-def positional_encoding(g, pos_enc_dim, framework = 'dgl'):
+def positional_encoding(g, pos_enc_dim, DATASET_NAME = None):
     """
         Graph positional encoding v/ Laplacian eigenvectors
     """
     # Laplacian,for the pyg
-    if framework == 'pyg':
+    try:
+        g.pos_enc = torch.load('data/ogbn/laplacian_'+DATASET_NAME[5:]+'.pt', map_location='cpu')
+        if g.pos_enc.size(1) !=  pos_enc_dim:
+            os.remove('data/ogbn/laplacian_'+DATASET_NAME[5:]+'.pt')
+            L = get_laplacian(g.edge_index, normalization='sym', dtype=torch.float64)
+            L = csr_matrix((L[1], (L[0][0], L[0][1])), shape=(g.num_nodes, g.num_nodes))
+            # Eigenvectors with scipy
+            # EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
+            EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim + 1, which='SR', tol=1e-2)  # for 40 PEs
+            EigVec = EigVec[:, EigVal.argsort()]  # increasing order
+            g.pos_enc = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1].astype(np.float32)).float()
+            torch.save(g.pos_enc.cpu(), 'data/ogbn/laplacian_' + DATASET_NAME[5:] + '.pt')
+    except:
         L = get_laplacian(g.edge_index,normalization='sym',dtype = torch.float64)
-        L = csr_matrix((L[1], (L[0][0], a1[0][1])), shape=(g.num_nodes, g.num_nodes))
+        L = csr_matrix((L[1], (L[0][0], L[0][1])), shape=(g.num_nodes, g.num_nodes))
         # Eigenvectors with scipy
         # EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
         EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim + 1, which='SR', tol=1e-2)  # for 40 PEs
         EigVec = EigVec[:, EigVal.argsort()]  # increasing order
         g.pos_enc = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1].astype(np.float32)).float()
-        # add astype to discards the imaginary part to satisfy the version change pytorch1.5.0
-    elif framework == 'dgl':
-        A = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
-        N = sp.diags(dgl.backend.asnumpy(g.in_degrees()).clip(1) ** -0.5, dtype=float)
-        L = sp.eye(g.number_of_nodes()) - N * A * N
-        # Eigenvectors with scipy
-        # EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim+1, which='SR')
-        EigVal, EigVec = sp.linalg.eigs(L, k=pos_enc_dim + 1, which='SR', tol=1e-2)  # for 40 PEs
-        EigVec = EigVec[:, EigVal.argsort()]  # increasing order
-        g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1].astype(np.float32)).float()
-        # add astype to discards the imaginary part to satisfy the version change pytorch1.5.0
+        torch.save(g.pos_enc.cpu(), 'data/ogbn/laplacian_'+DATASET_NAME[5:]+'.pt')
+    # add astype to discards the imaginary part to satisfy the version change pytorch1.5.0
 
     # # Eigenvectors with numpy
     # EigVal, EigVec = np.linalg.eig(L.toarray())
