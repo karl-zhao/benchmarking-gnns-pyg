@@ -6,7 +6,7 @@ import numpy as np
 import os.path as osp
 import dgl
 import torch
-
+from ogb.utils.url import decide_download, download_url, extract_zip
 from scipy import sparse as sp
 import numpy as np
 from tqdm import tqdm
@@ -89,8 +89,10 @@ class PygNodeSBMsDataset(InMemoryDataset):
                  meta_dict = None
                  ):
 
+        self.url = ''
         self.split = split
         self.root = data_dir
+        self.original_root = data_dir
         self.name = name
         self.is_test = split.lower() in ['test', 'val']
 
@@ -116,9 +118,22 @@ class PygNodeSBMsDataset(InMemoryDataset):
     def processed_file_names(self):
         return 'geometric_data_processed' + self.name + self.split + '.pt'
 
+    # def download(self):
+    #     r"""Downloads the dataset to the :obj:`self.raw_dir` folder."""
+    #     raise NotImplementedError
+
     def download(self):
-        r"""Downloads the dataset to the :obj:`self.raw_dir` folder."""
-        raise NotImplementedError
+        url = self.url
+        if decide_download(url):
+            path = download_url(url, self.original_root)
+            extract_zip(path, self.original_root)
+            os.unlink(path)
+            shutil.rmtree(self.root)
+            shutil.move(osp.join(self.original_root, self.download_name), self.root)
+        else:
+            print('Stop downloading.')
+            shutil.rmtree(self.root)
+            exit(-1)
 
     def process(self):
         with open(os.path.join(self.root, self.name + '_%s.pkl' % self.split), 'rb') as f:
