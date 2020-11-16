@@ -3,7 +3,7 @@
     selected by the user
 """
 
-from nets.SBMs_node_classification.gated_gcn_net import GatedGCNNet, GatedGCNNet_pyg
+from nets.SBMs_node_classification.gated_gcn_net import GatedGCNNet, GatedGCNNet_pyg, ResGatedGCNNet_pyg
 from nets.SBMs_node_classification.gcn_net import GCNNet, GCNNet_pyg
 from nets.SBMs_node_classification.gat_net import GATNet, GATNet_pyg
 from nets.SBMs_node_classification.graphsage_net import GraphSageNet, GraphSageNet_pyg
@@ -61,6 +61,9 @@ def GCN_pyg(net_params):
 def GatedGCN_pyg(net_params):
     return GatedGCNNet_pyg(net_params)
 
+def ResGatedGCN_pyg(net_params):
+    return ResGatedGCNNet_pyg(net_params)
+
 def GAT_pyg(net_params):
     return GATNet_pyg(net_params)
 # self.head = GraphConv(opt.in_channels, channels, conv, act, norm, bias, heads)
@@ -79,12 +82,11 @@ def gnn_model(MODEL_NAME, net_params):
         'MLP': MLP,
         'GIN': GIN,
         'MoNet': MoNet,
-        'RingGNN': RingGNN,
-        '3WLGNN': ThreeWLGNN,
         'MLP_pyg': MLP_pyg,
         'GIN_pyg': GIN_pyg,
         'GCN_pyg': GCN_pyg,
         'GatedGCN_pyg': GatedGCN_pyg,
+        'ResGatedGCN_pyg': ResGatedGCN_pyg,
         'GAT_pyg': GAT_pyg,
         'GraphSage_pyg': GraphSage_pyg,
         'MoNet_pyg': MoNet_pyg
