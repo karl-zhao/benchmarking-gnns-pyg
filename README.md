@@ -4,7 +4,7 @@
 
 <br>
 Note: This repository modified from graphdeeplearning/benchmarking-gnns.
-We refactor the code using the pyg framework and add the planetoid and ogb dataset to make the node classification.
+We refactor the code using the pyg framework and add the planetoid and ogb datasets to make the node classification.
 
 ## 1. Benchmark installation
 
@@ -79,3 +79,16 @@ tensorboard --logdir='./' --port 6006
 
 <br><br><br>
 
+### Citation
+
+
+```
+@misc{zhao2020pipeline,
+      title={A pipeline for fair comparison of graph neural networks in node classification tasks}, 
+      author={Wentao Zhao and Dalin Zhou and Xinguo Qiu and Wei Jiang},
+      year={2020},
+      eprint={2012.10619},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+``` 
